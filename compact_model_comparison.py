@@ -35,6 +35,74 @@ except ImportError as e:
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"🚀 Device: {device}")
 
+def apply_label_hiding_few_shot(train_paths, train_labels, mode='percentage', value=0.1, random_state=42):
+    """
+    True few-shot learning: Keep ALL training images but hide most labels.
+    
+    Args:
+        train_paths: All training image paths
+        train_labels: All training labels  
+        mode: 'percentage' or 'per_class'
+        value: Percentage of labeled data or samples per class
+        random_state: Random seed
+    
+    Returns:
+        train_paths: ALL paths (unchanged)
+        masked_labels: Labels with most set to -1 (unlabeled)
+        labeled_mask: Boolean mask showing which samples have labels
+    """
+    
+    total_samples = len(train_paths)
+    
+    if mode == 'percentage':
+        # Label only X% of data
+        n_labeled = int(total_samples * value)
+        labeled_indices = np.random.RandomState(random_state).choice(
+            total_samples, n_labeled, replace=False
+        )
+        
+    elif mode == 'per_class':
+        # Label only X samples per class
+        labeled_indices = []
+        for class_name in set(train_labels):
+            class_indices = [i for i, label in enumerate(train_labels) if label == class_name]
+            n_take = min(int(value), len(class_indices))
+            selected = np.random.RandomState(random_state).choice(
+                class_indices, n_take, replace=False
+            )
+            labeled_indices.extend(selected)
+        labeled_indices = np.array(labeled_indices)
+    
+    # Create masked labels: -1 for unlabeled, original for labeled
+    masked_labels = [-1] * total_samples  # All unlabeled initially
+    for idx in labeled_indices:
+        masked_labels[idx] = train_labels[idx]  # Restore original label
+    
+    # Create boolean mask for easy filtering
+    labeled_mask = [i in labeled_indices for i in range(total_samples)]
+    
+    return train_paths, masked_labels, labeled_mask
+
+def create_few_shot_loss_function(criterion, ignore_index=-1):
+    """
+    Create loss function that ignores unlabeled samples (-1)
+    """
+    def few_shot_loss(outputs, targets):
+        # Find samples with valid labels (not -1)
+        valid_mask = targets != ignore_index
+        
+        if valid_mask.sum() == 0:
+            # No labeled samples in this batch
+            return torch.tensor(0.0, requires_grad=True, device=outputs.device)
+        
+        # Compute loss only on labeled samples
+        valid_outputs = outputs[valid_mask]
+        valid_targets = targets[valid_mask]
+        
+        return criterion(valid_outputs, valid_targets)
+    
+    return few_shot_loss
+
 def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_value=0.1):
     """Run single model training and return results"""
     print(f"\n{'='*50}")
@@ -56,13 +124,26 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
     start_time = time.time()
     
     try:
-        # Load data (use existing clean dataset)
+        # Load data (use existing clean dataset) - NO few-shot here, we'll apply label hiding later
         train_paths, train_labels, val_paths, val_labels, test_paths, test_labels = data_splitter.split_clean_dataset(
             pickle_path='/teamspace/studios/this_studio/thesis_codes/clean_dataset.pkl',
             base_data_dir='/teamspace/studios/this_studio/crop_pest_data',
-            few_shot_mode=few_shot_mode,
-            few_shot_value=few_shot_value
+            few_shot_mode=None  # Don't reduce dataset size
         )
+        
+        # 🎯 TRUE FEW-SHOT: Hide labels instead of reducing dataset size
+        original_train_size = len(train_paths)
+        labeled_samples_count = original_train_size
+        
+        if few_shot_mode is not None:
+            train_paths, train_labels, labeled_mask = apply_label_hiding_few_shot(
+                train_paths, train_labels, few_shot_mode, few_shot_value, 
+                active_config.RANDOM_STATE if hasattr(active_config, 'RANDOM_STATE') else 42
+            )
+            labeled_samples_count = sum(labeled_mask)
+            print(f"🎯 Label Hiding Applied: {labeled_samples_count}/{original_train_size} samples have labels")
+        else:
+            print(f"🎯 Few-shot disabled: All {original_train_size} samples have labels")
         
         # Create dataloaders
         train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset = dataloader_setup.create_dataloaders(
@@ -76,7 +157,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         class_names = train_dataset.classes
         class_to_idx = train_dataset.class_to_idx
         
-        # Limit dataset size for quick testing
+        # 📊 SAMPLE SIZE LIMITING (if requested)
         if sample_size and sample_size < len(train_loader.dataset):
             train_size = min(sample_size * 70 // 100, len(train_loader.dataset))
             val_size = min(sample_size * 15 // 100, len(val_loader.dataset))
@@ -99,7 +180,10 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             test_loader = DataLoader(Subset(test_dataset, test_indices), 
                                    batch_size=active_config.BATCH_SIZE, shuffle=False)
             
-            print(f"📊 Limited to: Train={train_size}, Val={val_size}, Test={test_size}")
+            print(f"📊 Dataset limited to: Train={train_size}, Val={val_size}, Test={test_size}")
+            # Update labeled samples count if we reduced dataset size after few-shot
+            if few_shot_mode is not None and sample_size < original_train_size:
+                labeled_samples_count = min(labeled_samples_count, train_size)
         
         # Create model
         model = model_setup.create_model(num_classes, model_name, active_config).to(device)
@@ -110,12 +194,21 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         optimizer = torch.optim.Adam(model.parameters(), lr=active_config.LEARNING_RATE)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.1)
         
+        # 🎯 CREATE FEW-SHOT AWARE LOSS FUNCTION
+        base_criterion = torch.nn.CrossEntropyLoss()
+        if few_shot_mode is not None:
+            criterion = create_few_shot_loss_function(base_criterion, ignore_index=-1)
+            print(f"🎯 Using few-shot loss function (ignores -1 labels)")
+        else:
+            criterion = base_criterion
+            print(f"🎯 Using standard loss function")
+        
         # Train model
         train_result = training.train_model(
             model=model,
             train_loader=train_loader,
             val_loader=val_loader,
-            criterion=torch.nn.CrossEntropyLoss(),
+            criterion=criterion,
             optimizer=optimizer,
             scheduler=scheduler,
             device=device,
@@ -157,6 +250,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             'test_accuracy': test_result['test_accuracy'],
             'best_val_acc': train_result.get('best_val_acc', 0),
             'train_samples': train_size_actual,
+            'labeled_samples': labeled_samples_count,
             'test_samples': test_size_actual,
             'batch_size': active_config.BATCH_SIZE,
             'image_size': active_config.IMAGE_SIZE,
@@ -190,14 +284,21 @@ def main():
     # SAMPLE_SIZE = int(total_dataset_size * 0.01)  # Use 1% of dataset
     # SAMPLE_SIZE = 500                             # Use exactly 500 samples
     
-    # 🎯 FEW-SHOT LEARNING Configuration (override config files):
+    # 🎯 TRUE FEW-SHOT LEARNING Configuration (LABEL HIDING - not dataset reduction):
     FEW_SHOT_MODE = None                            # Disable few-shot learning
-    # FEW_SHOT_MODE = 'percentage'                  # Use percentage of labeled data
-    # FEW_SHOT_MODE = 'per_class'                   # Use fixed samples per class
-    FEW_SHOT_VALUE = 0.1                           # 10% labeled data OR 0.1 samples per class
+    # FEW_SHOT_MODE = 'percentage'                  # Hide labels: only X% of data has labels
+    # FEW_SHOT_MODE = 'per_class'                   # Hide labels: only X samples per class have labels
+    FEW_SHOT_VALUE = 0.1                           # 10% labeled data OR 5 samples per class
+    
+    # 💡 TRUE FEW-SHOT means: Model sees ALL images but most labels are hidden (-1)
+    # 💡 This is different from dataset reduction (which would show fewer images)
     
     print(f"🎯 Dataset: {'Full dataset' if SAMPLE_SIZE is None else f'{SAMPLE_SIZE} samples'}")
-    print(f"🎯 Few-shot: {'Disabled' if FEW_SHOT_MODE is None else f'{FEW_SHOT_MODE} ({FEW_SHOT_VALUE})'}")
+    if FEW_SHOT_MODE is None:
+        print(f"🎯 Few-shot: Disabled (all images have labels)")
+    else:
+        print(f"🎯 Few-shot: {FEW_SHOT_MODE} ({FEW_SHOT_VALUE}) - LABEL HIDING mode")
+        print(f"   💡 Models see ALL images but only some have labels!")
     
     # 🤖 MODEL SELECTION (these are just type labels, real names come from configs)
     model_types = [
@@ -232,7 +333,16 @@ def main():
             print(f"   🎯 Test Accuracy: {result['test_accuracy']:.2f}%")
             print(f"   📈 Best Val: {result['best_val_acc']:.2f}%")
             print(f"   ⏱️  Time: {result['time']:.1f}s")
-            print(f"   📊 Samples: {result['train_samples']} train, {result['test_samples']} test")
+            
+            # Show labeled vs total samples for few-shot
+            train_samples = result['train_samples']
+            labeled_samples = result.get('labeled_samples', train_samples)
+            if result['few_shot_mode'] is not None:
+                print(f"   📊 Samples: {train_samples} total train ({labeled_samples} labeled), {result['test_samples']} test")
+                print(f"   🎯 Label ratio: {labeled_samples}/{train_samples} ({labeled_samples/train_samples*100:.1f}%)")
+            else:
+                print(f"   📊 Samples: {train_samples} train, {result['test_samples']} test")
+            
             print(f"   batch size: {result['batch_size']}")
             print(f"   image size: {result['image_size']}")
             print(f"   epochs: {result['epochs']}")
