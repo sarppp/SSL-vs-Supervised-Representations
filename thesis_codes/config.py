@@ -32,7 +32,7 @@ MODEL_NAME = 'efficientnet_b3'  # Default model
 # Training Configuration
 LEARNING_RATE = 0.001
 WEIGHT_DECAY = 0.01
-EPOCHS = 1
+EPOCHS = 10
 PATIENCE = 3  # For LR scheduler
 LR_FACTOR = 0.5
 DROPOUT = 0.2
@@ -139,6 +139,6 @@ VAL_TEST_TRANSFORMS = {
     }
 }
 
-# Few-Shot Learning
-FEW_SHOT_MODE = True  # Options: None, 'percentage', 'per_class'
-FEW_SHOT_VALUE = 0.01  # 0.1 = 10%, 0.01 = 1%, or samples per class
+# Few-Shot Learning  
+FEW_SHOT_MODE = 'percentage'  # Options: None, 'percentage', 'per_class'
+FEW_SHOT_VALUE = 0.1  # 0.1 = 10%, 0.01 = 1%, or samples per class

@@ -400,8 +400,8 @@ def main():
     print("="*80)
     
     # 🎛️ QUICK CONFIG OVERRIDES (uncomment to modify for testing)
-    # config_cnn.EPOCHS = 5           # Override epochs for longer training
-    # config_dinov2.EPOCHS = 5        # Override epochs for longer training
+    config_cnn.EPOCHS = 5           # Override epochs for quicker testing
+    config_dinov2.EPOCHS = 5        # Override epochs for quicker testing
     config_cnn.FEW_SHOT_MODE = 'percentage'  # Enable few-shot
     config_cnn.FEW_SHOT_VALUE = 0.1          # Use 10% of data
     config_dinov2.FEW_SHOT_MODE = 'percentage' # Different few-shot mode
