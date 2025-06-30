@@ -10,6 +10,9 @@ from torch.utils.data import DataLoader, TensorDataset
 import sys
 import os
 import time
+import random
+from collections import Counter
+from sklearn.model_selection import train_test_split
 
 # Add thesis_codes to path
 sys.path.append(os.path.dirname(__file__))
@@ -164,7 +167,7 @@ def setup_optimizer_and_scheduler(model, config):
     
     return optimizer, scheduler
 
-def test_model(model_name, train_loader, val_loader, test_loader, config, class_names=None, class_to_idx=None, num_classes=3, data_size_mode='fixed', data_size_value=100, target_samples=100):
+def test_model(model_name, train_loader, val_loader, test_loader, config, class_names=None, class_to_idx=None, num_classes=3, train_size=60, val_size=20, test_size=20, total_samples_used=100):
     """Test a specific model"""
     print(f"\n{'='*60}")
     print(f"🧪 TESTING {model_name.upper()}")
@@ -230,26 +233,27 @@ def test_model(model_name, train_loader, val_loader, test_loader, config, class_
             compile_mode = getattr(config, 'COMPILE_MODE', 'default')
             
             # Use safer compilation mode for DINOv2 models
-            if 'dinov2' in model_name.lower() and compile_mode == 'default':
-                compile_mode = 'reduce-overhead'  # More compatible with complex architectures
-                print(f"⚡ Using safer compilation mode for DINOv2: {compile_mode}")
+            if 'dinov2' in model_name.lower():
+                # DINOv2 models have complex architectures that can cause device issues with torch.compile
+                print(f"⚠️  DINOv2 model detected: Disabling torch.compile to avoid device placement issues")
+                compile_enabled = False
             else:
                 print(f"⚡ Compiling model with mode: {compile_mode}")
-            
-            try:
-                compiled_model = torch.compile(model, mode=compile_mode)
                 
-                # Verify the compiled model still has necessary PyTorch methods
-                if hasattr(compiled_model, 'train') and hasattr(compiled_model, 'eval') and hasattr(compiled_model, 'parameters'):
-                    model = compiled_model
-                    print(f"   ✅ Model compilation successful")
-                else:
-                    print(f"   ⚠️  Compiled model missing PyTorch methods, using uncompiled model")
-                    print(f"   Available methods: {[attr for attr in dir(compiled_model) if not attr.startswith('_')][:10]}...")
+                try:
+                    compiled_model = torch.compile(model, mode=compile_mode)
+                    
+                    # Verify the compiled model still has necessary PyTorch methods
+                    if hasattr(compiled_model, 'train') and hasattr(compiled_model, 'eval') and hasattr(compiled_model, 'parameters'):
+                        model = compiled_model
+                        print(f"   ✅ Model compilation successful")
+                    else:
+                        print(f"   ⚠️  Compiled model missing PyTorch methods, using uncompiled model")
+                        print(f"   Available methods: {[attr for attr in dir(compiled_model) if not attr.startswith('_')][:10]}...")
+                        compile_enabled = False
+                except Exception as e:
+                    print(f"   ❌ Model compilation failed: {e}")
                     compile_enabled = False
-            except Exception as e:
-                print(f"   ❌ Model compilation failed: {e}")
-                compile_enabled = False
         
         # Mixed precision setup
         use_amp = getattr(config, 'MIXED_PRECISION', False) and device.type == 'cuda'
@@ -331,6 +335,27 @@ def test_model(model_name, train_loader, val_loader, test_loader, config, class_
             for class_name, class_info in test_eval_result['per_class_accuracy'].items():
                 print(f"     {class_name}: {class_info['accuracy']:.2f}% ({class_info['sample_count']} samples)")
         
+        # Verify model device placement for complex architectures like DINOv2
+        if 'dinov2' in model_name.lower():
+            # Ensure all model parameters are on the correct device
+            device_params = set()
+            for name, param in model.named_parameters():
+                device_params.add(param.device)
+            
+            device_buffers = set()
+            for name, buffer in model.named_buffers():
+                device_buffers.add(buffer.device)
+            
+            print(f"🔧 Model device verification:")
+            print(f"   Parameter devices: {device_params}")
+            print(f"   Buffer devices: {device_buffers}")
+            
+            if len(device_params) > 1 or len(device_buffers) > 1:
+                print(f"   ⚠️  Mixed device placement detected, ensuring all components are on {device}")
+                model = model.to(device)
+        
+        print("✅ Model setup completed successfully.")
+        
         return {
             'model_name': model_name,
             'config_used': 'config_dinov2.py' if 'dinov2' in model_name.lower() else 'config.py',
@@ -357,9 +382,10 @@ def test_model(model_name, train_loader, val_loader, test_loader, config, class_
             'image_size': config.IMAGE_SIZE,
             'weight_decay': config.WEIGHT_DECAY,
             # 📊 Data size tracking
-            'data_size_mode': data_size_mode,
-            'data_size_value': data_size_value,
-            'total_samples_used': target_samples,
+            'train_size_used': train_size,
+            'val_size_used': val_size,
+            'test_size_used': test_size,
+            'total_samples_used': total_samples_used,
             'train_samples': len(train_loader.dataset),
             'val_samples': len(val_loader.dataset),
             'test_samples_split': len(test_loader.dataset),
@@ -384,6 +410,57 @@ def test_model(model_name, train_loader, val_loader, test_loader, config, class_
             'error': str(e)
         }
 
+def calculate_split_sizes(total_samples, train_mode, train_value, val_mode, val_value, test_mode, test_value, num_classes):
+    """Calculate train/val/test split sizes based on mode and value"""
+    
+    # Calculate each split size
+    if train_mode == 'percentage':
+        train_size = int(total_samples * train_value)
+    else:  # fixed
+        train_size = train_value
+    
+    if val_mode == 'percentage':
+        val_size = int(total_samples * val_value)  
+    else:  # fixed
+        val_size = val_value
+        
+    if test_mode == 'percentage':
+        test_size = int(total_samples * test_value)
+    else:  # fixed
+        test_size = test_value
+    
+    # Ensure minimum samples per split (at least num_classes for proper stratification)
+    train_size = max(train_size, num_classes)
+    val_size = max(val_size, num_classes)
+    test_size = max(test_size, num_classes)
+    
+    # Ensure we don't exceed total samples
+    total_requested = train_size + val_size + test_size
+    if total_requested > total_samples:
+        print(f"⚠️  Warning: Requested {total_requested} samples but only {total_samples} available")
+        print(f"   Scaling down proportionally...")
+        
+        scale_factor = total_samples / total_requested
+        train_size = max(int(train_size * scale_factor), num_classes)
+        val_size = max(int(val_size * scale_factor), 1)
+        test_size = max(int(test_size * scale_factor), 1)
+        
+        # Final adjustment to exactly match total_samples
+        current_total = train_size + val_size + test_size
+        if current_total < total_samples:
+            # Add remaining to train set
+            train_size += (total_samples - current_total)
+        elif current_total > total_samples:
+            # Remove from largest set
+            if train_size >= val_size and train_size >= test_size:
+                train_size -= (current_total - total_samples)
+            elif val_size >= test_size:
+                val_size -= (current_total - total_samples)
+            else:
+                test_size -= (current_total - total_samples)
+    
+    return train_size, val_size, test_size
+
 def safe_format_number(value, decimal_places=1):
     """Safely format a number, handling strings and None values"""
     if value is None:
@@ -402,20 +479,30 @@ def main():
     # 🎛️ QUICK CONFIG OVERRIDES (uncomment to modify for testing)
     config_cnn.EPOCHS = 5           # Override epochs for quicker testing
     config_dinov2.EPOCHS = 5        # Override epochs for quicker testing
-    config_cnn.FEW_SHOT_MODE = 'percentage'  # Enable few-shot
-    config_cnn.FEW_SHOT_VALUE = 0.1          # Use 10% of data
-    config_dinov2.FEW_SHOT_MODE = 'percentage' # Different few-shot mode
-    config_dinov2.FEW_SHOT_VALUE = 0.1         # 20 samples per class
+    #config_cnn.FEW_SHOT_MODE = 'percentage'  # Enable few-shot
+    #config_cnn.FEW_SHOT_VALUE = 0.4          # Use 10% of data
+    #config_dinov2.FEW_SHOT_MODE = 'percentage' # Different few-shot mode
+    #config_dinov2.FEW_SHOT_VALUE = 0.4         # 20 samples per class
     
-    # 📊 DATA SIZE CONTROL FOR TESTING (choose one method)
-    DATA_SIZE_MODE = 'fixed'        # Options: 'full', 'percentage', 'fixed'
-    DATA_SIZE_VALUE = 800           # For 'percentage': 0.1 = 10%, for 'fixed': number of samples
+    # 📊 INDEPENDENT DATA SIZE CONTROL FOR EACH SPLIT
+    # You can now control train/val/test sizes independently!
     
-    # Alternative options to try:
-    # DATA_SIZE_MODE = 'full'         # Use complete dataset (like data_splitter.py)
-    # DATA_SIZE_MODE = 'percentage'   # Use percentage of dataset
-    # DATA_SIZE_VALUE = 0.1           # Use 10% of total data
-    # DATA_SIZE_VALUE = 1000          # Use 1000 samples (if mode='fixed')
+    # TRAINING SET SIZE
+    TRAIN_SIZE_MODE = 'fixed'         # Options: 'percentage', 'fixed'
+    TRAIN_SIZE_VALUE = 1000            # For 'percentage': 0.1 = 10%, for 'fixed': number of samples
+    
+    # VALIDATION SET SIZE
+    VAL_SIZE_MODE = 'percentage'           # Options: 'percentage', 'fixed'
+    VAL_SIZE_VALUE = 0.15               # For 'percentage': 0.05 = 5%, for 'fixed': number of samples
+    
+    # TEST SET SIZE
+    TEST_SIZE_MODE = 'percentage'          # Options: 'percentage', 'fixed'
+    TEST_SIZE_VALUE = 0.15              # For 'percentage': 0.15 = 15%, for 'fixed': number of samples
+    
+    # Alternative configurations you can try:
+    # TRAIN_SIZE_MODE = 'percentage'; TRAIN_SIZE_VALUE = 0.6  # 60% of total data
+    # VAL_SIZE_MODE = 'percentage'; VAL_SIZE_VALUE = 0.2      # 20% of total data  
+    # TEST_SIZE_MODE = 'percentage'; TEST_SIZE_VALUE = 0.2    # 20% of total data
     
     # 🎯 ENABLE FEW-SHOT LEARNING (uncomment to activate):
     # config_cnn.FEW_SHOT_MODE = 'percentage'      # Enable few-shot for CNN
@@ -431,14 +518,25 @@ def main():
     print(f"   DINOv2 Epochs: {config_dinov2.EPOCHS}")
     print(f"   CNN Few-shot: {getattr(config_cnn, 'FEW_SHOT_MODE', 'Disabled')}")
     print(f"   DINOv2 Few-shot: {getattr(config_dinov2, 'FEW_SHOT_MODE', 'Disabled')}")
-    print(f"   Data Size Mode: {DATA_SIZE_MODE}")
-    print(f"   Data Size Value: {DATA_SIZE_VALUE}")
-    if DATA_SIZE_MODE == 'percentage':
-        print(f"   Expected samples: ~{int(DATA_SIZE_VALUE * 100)}% of dataset")
-    elif DATA_SIZE_MODE == 'fixed':
-        print(f"   Expected samples: {DATA_SIZE_VALUE}")
+    print(f"   Data Split Configuration:")
+    print(f"     Training: {TRAIN_SIZE_MODE} - {TRAIN_SIZE_VALUE}")
+    print(f"     Validation: {VAL_SIZE_MODE} - {VAL_SIZE_VALUE}")
+    print(f"     Test: {TEST_SIZE_MODE} - {TEST_SIZE_VALUE}")
+    
+    if TRAIN_SIZE_MODE == 'percentage':
+        print(f"   Expected train samples: ~{int(TRAIN_SIZE_VALUE * 100)}% of dataset")
     else:
-        print(f"   Expected samples: Full dataset")
+        print(f"   Expected train samples: {TRAIN_SIZE_VALUE}")
+    
+    if VAL_SIZE_MODE == 'percentage':
+        print(f"   Expected val samples: ~{int(VAL_SIZE_VALUE * 100)}% of dataset")
+    else:
+        print(f"   Expected val samples: {VAL_SIZE_VALUE}")
+        
+    if TEST_SIZE_MODE == 'percentage':
+        print(f"   Expected test samples: ~{int(TEST_SIZE_VALUE * 100)}% of dataset")
+    else:
+        print(f"   Expected test samples: {TEST_SIZE_VALUE}")
     
     # Models to test with their respective configs (you can change these later)
     models_to_test = [
@@ -460,7 +558,6 @@ def main():
         # 📁 REAL DATA LOADING:
         from data_loader import load_image_paths_and_labels
         from dataloader_setup import create_dataloaders
-        from sklearn.model_selection import train_test_split
         
         # Load data from folder structure
         data_dir = '/teamspace/studios/this_studio/crop_pest_data'  # Change to your dataset path
@@ -478,32 +575,41 @@ def main():
         print(f"   Total samples: {len(image_paths)}")
         print(f"   Label range: [{min(label_indices)}, {max(label_indices)}]")
         
-        # 📊 Apply data size control for testing (separate from few-shot learning)
+        # 📊 Calculate independent split sizes
         original_total_samples = len(image_paths)
-        target_samples = original_total_samples  # Default to full dataset
         
-        if DATA_SIZE_MODE == 'full':
-            target_samples = len(image_paths)
-            print(f"📊 Using FULL dataset: {target_samples} samples")
-            
-        elif DATA_SIZE_MODE == 'percentage':
-            target_samples = int(len(image_paths) * DATA_SIZE_VALUE)
-            target_samples = max(target_samples, num_classes * 3)  # Ensure at least 3 per class
-            target_samples = min(target_samples, len(image_paths))  # Don't exceed available data
-            print(f"📊 Using {DATA_SIZE_VALUE*100:.1f}% of dataset: {target_samples} samples")
-            
-        elif DATA_SIZE_MODE == 'fixed':
-            target_samples = DATA_SIZE_VALUE
-            target_samples = max(target_samples, num_classes * 3)  # Ensure at least 3 per class
-            target_samples = min(target_samples, len(image_paths))  # Don't exceed available data
-            print(f"📊 Using FIXED size: {target_samples} samples")
+        # Use the new independent split configuration
+        train_size, val_size, test_size = calculate_split_sizes(
+            total_samples=original_total_samples,
+            train_mode=TRAIN_SIZE_MODE, train_value=TRAIN_SIZE_VALUE,
+            val_mode=VAL_SIZE_MODE, val_value=VAL_SIZE_VALUE,
+            test_mode=TEST_SIZE_MODE, test_value=TEST_SIZE_VALUE,
+            num_classes=num_classes
+        )
         
-        # Apply sampling if needed
-        if target_samples < len(image_paths):
-            import random
+        print(f"📊 Independent Split Configuration:")
+        print(f"   Total available samples: {original_total_samples}")
+        print(f"   Planned splits:")
+        print(f"     Training: {train_size} samples")
+        print(f"     Validation: {val_size} samples") 
+        print(f"     Test: {test_size} samples")
+        print(f"     Total requested: {train_size + val_size + test_size} samples")
+        
+        # Calculate total samples needed
+        total_needed = train_size + val_size + test_size
+        
+        # ⚠️ Check if we have enough data
+        if total_needed > original_total_samples:
+            print(f"   ❌ ERROR: Requested {total_needed} samples but only {original_total_samples} available!")
+            print(f"   💡 Solution: Reduce split sizes or switch to percentage mode")
+            print(f"   💡 Example: TRAIN_SIZE_MODE='percentage', TRAIN_SIZE_VALUE=0.7")
+            continue  # Skip this model and continue with next
+        
+        # Sample data if we need fewer samples than available
+        if total_needed < len(image_paths):
             random.seed(model_config.RANDOM_STATE)
             combined_data = list(zip(image_paths, label_indices))
-            sampled_data = random.sample(combined_data, target_samples)
+            sampled_data = random.sample(combined_data, total_needed)
             image_paths, label_indices = zip(*sampled_data)
             image_paths, label_indices = list(image_paths), list(label_indices)
             print(f"   Sampled from {original_total_samples} → {len(image_paths)} samples")
@@ -547,7 +653,6 @@ def main():
             print(f"   📊 Hidden labels: {len(image_paths) - labeled_samples} samples")
             
             # Create mask for which samples have labels
-            import random
             random.seed(model_config.RANDOM_STATE)
             labeled_indices = random.sample(range(len(image_paths)), labeled_samples)
             labeled_mask = [i in labeled_indices for i in range(len(image_paths))]
@@ -566,69 +671,101 @@ def main():
             print(f"🎯 Few-shot learning: DISABLED (all {len(image_paths)} samples have labels)")
             print(f"   To enable few-shot, uncomment the config lines in main()")
         
-        # Split data into train/val/test with few-shot consideration
-        from collections import Counter
+        # 📊 Create independent train/val/test splits based on calculated sizes
+        print(f"📊 Creating independent data splits:")
         
-        # Separate labeled and unlabeled samples for proper few-shot handling
-        labeled_paths = [path for path, label in zip(image_paths, label_indices) if label != -1]
-        labeled_labels = [label for label in label_indices if label != -1]
-        unlabeled_paths = [path for path, label in zip(image_paths, label_indices) if label == -1]
+        # Shuffle all data first
+        random.seed(model_config.RANDOM_STATE)
+        combined_data = list(zip(image_paths, label_indices, original_label_indices))
+        random.shuffle(combined_data)
         
-        print(f"📊 Data split preparation:")
-        print(f"   Labeled samples: {len(labeled_paths)}")
-        print(f"   Unlabeled samples: {len(unlabeled_paths)}")
+        # Split according to calculated sizes
+        train_end = train_size
+        val_end = train_size + val_size
+        test_end = train_size + val_size + test_size
         
-        # Split ONLY labeled samples for training (true few-shot learning)
-        if len(labeled_labels) > 0:
-            class_counts = Counter(labeled_labels)
-            min_class_count = min(class_counts.values())
-            
-            print(f"🔍 Labeled data analysis:")
-            print(f"   Labeled samples: {len(labeled_paths)}")
-            print(f"   Classes in labeled data: {len(class_counts)}")
-            print(f"   Min samples per class: {min_class_count}")
-            
-            if len(labeled_paths) >= 4 and min_class_count >= 1:  # Minimum for split
-                # Calculate validation size (at least 1, at most 30% of labeled data)
-                val_size = max(1, min(int(len(labeled_paths) * 0.3), len(labeled_paths) - 1))
-                val_ratio = val_size / len(labeled_paths)
-                
-                print(f"   Splitting {len(labeled_paths)} labeled samples:")
-                print(f"   Val size: {val_size} ({val_ratio*100:.1f}%)")
-                
-                try:
-                    # Split labeled data
-                    train_paths, val_paths, train_labels, val_labels = train_test_split(
-                        labeled_paths, labeled_labels, test_size=val_ratio, 
-                        stratify=labeled_labels if min_class_count >= 2 else None, 
-                        random_state=model_config.RANDOM_STATE)
-                except ValueError as e:
-                    print(f"   Stratification failed: {e}")
-                    # Fallback to random split
-                    train_paths, val_paths, train_labels, val_labels = train_test_split(
-                        labeled_paths, labeled_labels, test_size=val_ratio, 
-                        random_state=model_config.RANDOM_STATE)
-            else:
-                # Very few labeled samples - use most for training, minimal for validation
-                if len(labeled_paths) >= 2:
-                    train_paths = labeled_paths[:-1]
-                    train_labels = labeled_labels[:-1]
-                    val_paths = labeled_paths[-1:]
-                    val_labels = labeled_labels[-1:]
-                else:
-                    # Only 1 labeled sample - use it for both train and val
-                    train_paths, train_labels = labeled_paths, labeled_labels
-                    val_paths, val_labels = labeled_paths, labeled_labels
+        # Create splits
+        train_data = combined_data[:train_end]
+        val_data = combined_data[train_end:val_end]
+        test_data = combined_data[val_end:test_end]
+        
+        # Extract paths and labels for each split
+        if train_data:
+            train_paths, train_labels_masked, train_labels_original = zip(*train_data)
+            train_paths, train_labels_masked = list(train_paths), list(train_labels_masked)
         else:
-            # No labeled samples (shouldn't happen, but safety)
-            print(f"⚠️  WARNING: No labeled samples found!")
-            train_paths, train_labels = [], []
-            val_paths, val_labels = [], []
+            train_paths, train_labels_masked = [], []
+            
+        if val_data:
+            val_paths, val_labels_masked, val_labels_original = zip(*val_data)
+            val_paths, val_labels_masked = list(val_paths), list(val_labels_masked)
+        else:
+            val_paths, val_labels_masked = [], []
+            
+        if test_data:
+            test_paths, test_labels_masked, test_labels_original = zip(*test_data)
+            test_paths, test_labels_original = list(test_paths), list(test_labels_original)
+        else:
+            test_paths, test_labels_original = [], []
         
-        # Test set: Use ALL samples with their TRUE labels (before few-shot masking)
-        # This is important - we want to test on both seen and unseen data with true labels
-        test_paths = image_paths.copy()
-        test_labels = original_label_indices.copy()  # Use original labels, not masked ones
+        # For few-shot learning: only use labeled samples for training/validation
+        if few_shot_enabled:
+            print(f"🎯 Applying few-shot masking to train/val splits:")
+            # Filter out unlabeled samples (-1) from train/val sets
+            train_labeled_indices = [i for i, label in enumerate(train_labels_masked) if label != -1]
+            val_labeled_indices = [i for i, label in enumerate(val_labels_masked) if label != -1]
+            
+            train_paths = [train_paths[i] for i in train_labeled_indices]
+            train_labels_masked = [train_labels_masked[i] for i in train_labeled_indices]
+            
+            val_paths = [val_paths[i] for i in val_labeled_indices]
+            val_labels_masked = [val_labels_masked[i] for i in val_labeled_indices]
+            
+            print(f"   Train samples with labels: {len(train_paths)}/{train_size}")
+            print(f"   Val samples with labels: {len(val_paths)}/{val_size}")
+            
+            # ⚠️ CRITICAL: Ensure we have at least some samples for training and validation
+            if len(train_paths) == 0:
+                print(f"   ❌ ERROR: No labeled training samples after few-shot filtering!")
+                print(f"   💡 Solution: Increase FEW_SHOT_VALUE or disable few-shot learning")
+                return None
+                
+            if len(val_paths) == 0:
+                print(f"   ⚠️  WARNING: No labeled validation samples after few-shot filtering!")
+                print(f"   💡 Using 1 training sample for validation to avoid division by zero")
+                # Use one training sample for validation to prevent empty validation set
+                val_paths = [train_paths[0]]
+                val_labels_masked = [train_labels_masked[0]]
+        
+        # Use original labels for train/val (convert from masked labels)
+        train_labels = train_labels_masked if not few_shot_enabled else train_labels_masked
+        val_labels = val_labels_masked if not few_shot_enabled else val_labels_masked
+        test_labels = test_labels_original  # Always use original labels for test
+        
+        # ✅ FINAL VALIDATION: Ensure no empty datasets
+        print(f"📊 Final split validation:")
+        print(f"   Training samples: {len(train_paths)}")
+        print(f"   Validation samples: {len(val_paths)}")
+        print(f"   Test samples: {len(test_paths)}")
+        
+        if len(train_paths) == 0:
+            print(f"   ❌ ERROR: Empty training set!")
+            return None
+        if len(val_paths) == 0:
+            print(f"   ❌ ERROR: Empty validation set!")
+            return None
+        if len(test_paths) == 0:
+            print(f"   ❌ ERROR: Empty test set!")
+            return None
+        
+        # 🔧 FIX: Convert integer labels back to string labels for CustomCropDataset
+        # CustomCropDataset expects string class names, not integer indices
+        idx_to_class = {idx: name for name, idx in class_to_idx.items()}
+        
+        # Convert train/val/test labels from integers back to string class names
+        train_labels_str = [idx_to_class[label] for label in train_labels] if train_labels else []
+        val_labels_str = [idx_to_class[label] for label in val_labels] if val_labels else []
+        test_labels_str = [idx_to_class[label] for label in test_labels]
         
         print(f"📊 Final data splits:")
         print(f"   Training: {len(train_paths)} samples (ONLY labeled data for few-shot)")
@@ -638,17 +775,66 @@ def main():
         if hasattr(model_config, 'FEW_SHOT_MODE') and model_config.FEW_SHOT_MODE:
             print(f"   Few-shot effect: Model trains on {len(train_paths)}/{len(image_paths)} samples ({len(train_paths)/len(image_paths)*100:.1f}%)")
         
-        # Create dataloaders
-        train_loader, val_loader, test_loader, _, _, _ = create_dataloaders(
-            train_paths, train_labels, val_paths, val_labels, test_paths, test_labels, 
-            config_module=model_config, run_batch_test=False)
+        print(f"🔧 Label format conversion:")
+        print(f"   Train labels: {train_labels[:3] if train_labels else 'None'} → {train_labels_str[:3] if train_labels_str else 'None'}")
+        print(f"   Val labels: {val_labels[:3] if val_labels else 'None'} → {val_labels_str[:3] if val_labels_str else 'None'}")
+        print(f"   Test labels: {test_labels[:3]} → {test_labels_str[:3]}")
         
-        # Create data loaders with model-specific config (for synthetic data)
-        # train_loader, val_loader = create_data_loaders(X, y, model_config)
+        # Check if data splitting was successful
+        if train_paths is None or val_paths is None or test_paths is None:
+            print(f"   ❌ Data splitting failed for {model_name}, skipping...")
+            continue
         
-        # Test the model (pass model_name explicitly instead of modifying config)
-        result = test_model(model_name, train_loader, val_loader, test_loader, model_config, class_names, class_to_idx, num_classes, DATA_SIZE_MODE, DATA_SIZE_VALUE, target_samples)
-        results.append(result)
+        # Create dataloaders with string labels (not integer indices)
+        try:
+            train_loader, val_loader, test_loader, _, _, _ = create_dataloaders(
+                train_paths, train_labels_str, val_paths, val_labels_str, test_paths, test_labels_str, 
+                config_module=model_config, run_batch_test=False)
+        except Exception as e:
+            print(f"   ❌ DataLoader creation failed for {model_name}: {e}")
+            continue
+        
+        # Verify dataloaders are not empty
+        try:
+            # Try to get dataset lengths safely
+            train_len = 0
+            val_len = 0  
+            test_len = 0
+            
+            try:
+                train_len = len(train_loader.dataset)  # type: ignore
+            except:
+                train_len = len(train_paths)
+                
+            try:
+                val_len = len(val_loader.dataset)  # type: ignore
+            except:
+                val_len = len(val_paths)
+                
+            try:
+                test_len = len(test_loader.dataset)  # type: ignore
+            except:
+                test_len = len(test_paths)
+            
+            if train_len == 0 or val_len == 0 or test_len == 0:
+                print(f"   ❌ Empty dataloaders detected for {model_name} (train:{train_len}, val:{val_len}, test:{test_len}), skipping...")
+                continue
+                
+            print(f"   ✅ DataLoaders created successfully (train:{train_len}, val:{val_len}, test:{test_len})")
+        except Exception as e:
+            print(f"   ⚠️  Could not verify dataloader sizes: {e}, proceeding anyway...")
+        
+        # Test the model with independent split sizes
+        result = test_model(
+            model_name, train_loader, val_loader, test_loader, model_config, 
+            class_names, class_to_idx, num_classes, 
+            train_size, val_size, test_size, total_needed
+        )
+        
+        if result is not None:  # Only append successful results
+            results.append(result)
+        else:
+            print(f"   ❌ Model training failed for {model_name}, skipping...")
         
         # Clear GPU cache between models
         if device.type == 'cuda':
@@ -683,9 +869,9 @@ def main():
             print(f"      Early Stopping: {result.get('early_stopping_used', 'N/A')}")
             print(f"      Mixed Precision: {result.get('mixed_precision_used', 'N/A')}")
             print(f"   📊 Data Used:")
-            print(f"      Data Mode: {result.get('data_size_mode', 'N/A')}")
             print(f"      Total Samples: {result.get('total_samples_used', 'N/A')}")
-            print(f"      Train/Val/Test: {result.get('train_samples', 'N/A')}/{result.get('val_samples', 'N/A')}/{result.get('test_samples_split', 'N/A')}")
+            print(f"      Planned Splits: {result.get('train_size_used', 'N/A')}/{result.get('val_size_used', 'N/A')}/{result.get('test_size_used', 'N/A')}")
+            print(f"      Actual Train/Val/Test: {result.get('train_samples', 'N/A')}/{result.get('val_samples', 'N/A')}/{result.get('test_samples_split', 'N/A')}")
             if result.get('few_shot_mode', 'Disabled') != 'Disabled':
                 train_pct = (result.get('train_samples', 0) / result.get('total_samples_used', 1)) * 100
                 print(f"      Few-shot training: {train_pct:.1f}% of total data had labels")
