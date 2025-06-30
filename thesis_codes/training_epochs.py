@@ -17,9 +17,9 @@ def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False
         config_module = default_config
     
     # Debug: Check what model actually is
-    print(f"🔍 DEBUG: model type = {type(model)}")
-    print(f"🔍 DEBUG: model has train method = {hasattr(model, 'train')}")
-    print(f"🔍 DEBUG: model = {model}")
+    # print(f"🔍 DEBUG: model type = {type(model)}")
+    # print(f"🔍 DEBUG: model has train method = {hasattr(model, 'train')}")
+    # print(f"🔍 DEBUG: model = {model}")
     
     model.train()
     total_loss = 0
