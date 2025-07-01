@@ -17,10 +17,9 @@ services:
               count: all
               capabilities: [gpu]
     
-    # Mount your code
+    # Mount your code (same as your working docker run command)
     volumes:
-      - ./dino_cnn:/workspace/dino_cnn
-      - ./data:/workspace/data
+      - /home:/workspace
     
     # Keep container running
     stdin_open: true
