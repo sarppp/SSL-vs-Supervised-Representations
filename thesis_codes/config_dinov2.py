@@ -3,7 +3,7 @@ import multiprocessing as mp
 # Dataset Configuration for DINOv2
 IMAGE_SIZE = (378, 378)  # DINOv2 typically works well with 224x224
 BATCH_SIZE = 64  # Smaller batch size due to larger models
-NUM_WORKERS = 0  # Keep at 0 to avoid file access issues
+NUM_WORKERS = 4  # Optimal for 6-core system (fixed Docker shm)
 MAX_WORKERS = mp.cpu_count()
 
 # Learning Rate Warmup (more important for DINOv2)
@@ -165,6 +165,7 @@ VAL_TEST_TRANSFORMS = {
 # DINOv2 specific settings
 USE_GRADIENT_CHECKPOINTING = True  # Save memory for larger models
 MIXED_PRECISION = True
+
 COMPILE_MODEL = True  # Set to True for PyTorch 2.0+ speedup 
 COMPILE_MODE = 'default'  # Options: 'default', 'reduce-overhead', 'max-autotune'
 

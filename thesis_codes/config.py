@@ -3,7 +3,7 @@ import multiprocessing as mp
 # Dataset Configuration
 IMAGE_SIZE = (384, 384)
 BATCH_SIZE = 64
-NUM_WORKERS = 0  # Keep at 0 to avoid file access issues
+NUM_WORKERS = 4  # Optimal for 6-core system (fixed Docker shm)
 MAX_WORKERS = mp.cpu_count()
 
 # Learning Rate Warmup
@@ -137,6 +137,10 @@ VAL_TEST_TRANSFORMS = {
         'std': [0.229, 0.224, 0.225]
     }
 }
+
+# Model Compilation (PyTorch 2.0+ speedup)
+COMPILE_MODEL = False  # Disabled - compilation overhead not worth it for short CNN training
+COMPILE_MODE = 'default'  # Options: 'default', 'reduce-overhead', 'max-autotune'
 
 # Few-Shot Learning (interpreted by individual modules)
 FEW_SHOT_MODE = None  # Options: None, 'percentage', 'per_class'

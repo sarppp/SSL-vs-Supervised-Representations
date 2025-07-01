@@ -634,6 +634,247 @@ class ModelSetupLogger:
         self.logger.warning(f"⚠️  {warning_msg}")
 
 
+class ComparisonLogger:
+    """Centralized logging for model comparison experiments."""
+    
+    def __init__(self, timestamp: Optional[str] = None):
+        self.timestamp = timestamp or datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.session_id = f"comparison_{self.timestamp}"
+        
+        # Setup directories
+        self.log_dir = Path("logs")
+        self.results_dir = Path("comparison_results")
+        self.log_dir.mkdir(exist_ok=True)
+        self.results_dir.mkdir(exist_ok=True)
+        
+        # Setup logger
+        self.logger = self._setup_logger()
+        self.log_filename = self.log_dir / f"comparison_{self.session_id}.log"
+        
+        # Experiment tracking
+        self.experiment_start = datetime.datetime.now()
+        self.model_results = []
+        self.experiment_metadata = {}
+    
+    def _setup_logger(self) -> logging.Logger:
+        """Setup logger with file and console handlers."""
+        logger = logging.getLogger(f"comparison_{self.session_id}")
+        logger.setLevel(logging.INFO)
+        
+        # Clear existing handlers
+        for handler in logger.handlers[:]:
+            logger.removeHandler(handler)
+        
+        # File handler
+        log_file = self.log_dir / f"comparison_{self.session_id}.log"
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.INFO)
+        
+        # Console handler
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        
+        # Formatter
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        console_handler.setFormatter(formatter)
+        
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
+        
+        return logger
+    
+    def log_experiment_start(self, dataset_info: Dict, experiment_config: Dict):
+        """Log experiment start information."""
+        self.experiment_metadata.update({
+            'dataset_info': dataset_info,
+            'experiment_config': experiment_config,
+            'start_time': self.experiment_start.isoformat()
+        })
+        
+        self.logger.info("🥊 STARTING MODEL COMPARISON EXPERIMENT")
+        self.logger.info("=" * 60)
+        self.logger.info(f"🔖 Session ID: {self.session_id}")
+        self.logger.info(f"⏰ Started at: {self.experiment_start.strftime('%Y-%m-%d %H:%M:%S')}")
+        self.logger.info(f"📄 Log file: {self.log_filename}")
+        
+        # Dataset info
+        total_size = dataset_info.get('total_dataset_size', 0)
+        sample_size = experiment_config.get('sample_size')
+        if sample_size:
+            percentage = (sample_size / total_size) * 100 if total_size > 0 else 0
+            self.logger.info(f"📊 Dataset: {sample_size:,} samples ({percentage:.1f}% of {total_size:,})")
+        else:
+            self.logger.info(f"📊 Dataset: Full dataset ({total_size:,} samples)")
+        
+        # Few-shot info
+        few_shot_mode = experiment_config.get('few_shot_mode')
+        if few_shot_mode:
+            few_shot_value = experiment_config.get('few_shot_value')
+            self.logger.info(f"🎯 Few-shot: {few_shot_mode} ({few_shot_value}) - LABEL HIDING mode")
+            self.logger.info(f"   💡 Models see ALL images but only some have labels!")
+        else:
+            self.logger.info(f"🎯 Few-shot: Disabled (all images have labels)")
+        
+        # Models to compare
+        models = experiment_config.get('models', [])
+        self.logger.info(f"🔧 Models to compare:")
+        for model_type, actual_name in models:
+            self.logger.info(f"   {model_type.upper()}: {actual_name}")
+    
+    def log_model_start(self, model_type: str, model_name: str, config_info: Dict):
+        """Log individual model training start."""
+        self.logger.info(f"\n{'='*50}")
+        self.logger.info(f"🧪 TESTING {model_type.upper()}: {model_name}")
+        self.logger.info(f"{'='*50}")
+        self.logger.info(f"⚙️  Epochs: {config_info.get('epochs', 'N/A')}")
+        self.logger.info(f"📋 Batch size: {config_info.get('batch_size', 'N/A')}")
+        self.logger.info(f"📐 Image size: {config_info.get('image_size', 'N/A')}")
+        self.logger.info(f"📈 Learning rate: {config_info.get('learning_rate', 'N/A')}")
+        
+        # Few-shot specific info
+        few_shot_mode = config_info.get('few_shot_mode')
+        if few_shot_mode:
+            self.logger.info(f"🎯 Few-shot: {few_shot_mode} ({config_info.get('few_shot_value', 'N/A')})")
+    
+    def log_dataset_processing(self, model_type: str, original_sizes: Dict, final_sizes: Dict, few_shot_info: Dict = None):
+        """Log dataset processing information."""
+        self.logger.info(f"📊 Dataset processing for {model_type.upper()}:")
+        self.logger.info(f"   Original: Train={original_sizes.get('train', 0):,}, "
+                        f"Val={original_sizes.get('val', 0):,}, Test={original_sizes.get('test', 0):,}")
+        self.logger.info(f"   Final: Train={final_sizes.get('train', 0):,}, "
+                        f"Val={final_sizes.get('val', 0):,}, Test={final_sizes.get('test', 0):,}")
+        
+        if few_shot_info:
+            labeled_samples = few_shot_info.get('labeled_samples', 0)
+            total_samples = final_sizes.get('train', 0)
+            if total_samples > 0:
+                self.logger.info(f"   🏷️  Labeled samples: {labeled_samples:,}/{total_samples:,} "
+                               f"({labeled_samples/total_samples*100:.1f}%)")
+    
+    def log_model_complete(self, model_type: str, model_name: str, result: Dict):
+        """Log individual model completion."""
+        if result.get('success', False):
+            self.logger.info(f"\n✅ {model_type.upper()} TRAINING COMPLETE!")
+            self.logger.info(f"   🎯 Train Accuracy: {result.get('train_accuracy', 0):.2f}%")
+            self.logger.info(f"   🎯 Test Accuracy: {result.get('test_accuracy', 0):.2f}%")
+            self.logger.info(f"   📈 Best Val: {result.get('best_val_acc', 0):.2f}%")
+            self.logger.info(f"   ⏱️  Time: {result.get('time', 0):.1f}s")
+            self.model_results.append(result)
+        else:
+            self.logger.error(f"\n❌ {model_type.upper()} TRAINING FAILED!")
+            self.logger.error(f"   💥 Error: {result.get('error', 'Unknown error')}")
+            self.logger.error(f"   ⏱️  Time: {result.get('time', 0):.1f}s")
+    
+    def log_gpu_cleanup(self):
+        """Log GPU memory cleanup."""
+        self.logger.info("🧹 Clearing GPU cache between models...")
+    
+    def log_comparison_results(self, results: List[Dict]):
+        """Log final comparison results."""
+        self.logger.info(f"\n{'='*60}")
+        self.logger.info("📊 COMPARISON RESULTS")
+        self.logger.info("=" * 60)
+        
+        successful_results = [r for r in results if r.get('success', False)]
+        failed_results = [r for r in results if not r.get('success', False)]
+        
+        # Log successful results
+        for result in successful_results:
+            self.logger.info(f"\n🏆 {result['model_type'].upper()}: {result['model_name']}")
+            self.logger.info(f"   🎯 Train Accuracy: {result['train_accuracy']:.2f}%")
+            self.logger.info(f"   🎯 Test Accuracy: {result['test_accuracy']:.2f}%")
+            self.logger.info(f"   📈 Best Val: {result['best_val_acc']:.2f}%")
+            self.logger.info(f"   ⏱️  Time: {result['time']:.1f}s")
+            
+            # Dataset info
+            train_samples = result.get('train_samples', 0)
+            val_samples = result.get('val_samples', 0)
+            test_samples = result.get('test_samples', 0)
+            labeled_samples = result.get('labeled_samples', train_samples)
+            
+            if result.get('few_shot_mode'):
+                self.logger.info(f"   📊 Samples: {train_samples} total train ({labeled_samples} labeled), "
+                               f"{val_samples} val, {test_samples} test")
+                self.logger.info(f"   🎯 Label ratio: {labeled_samples}/{train_samples} "
+                               f"({labeled_samples/train_samples*100:.1f}%)")
+            else:
+                self.logger.info(f"   📊 Samples: {train_samples} train, {val_samples} val, {test_samples} test")
+            
+            self.logger.info(f"   ⚙️  Config: batch_size={result.get('batch_size', 'N/A')}, "
+                           f"image_size={result.get('image_size', 'N/A')}, epochs={result.get('epochs', 'N/A')}")
+            
+            few_shot_info = 'Disabled' if result.get('few_shot_mode') is None else f"{result.get('few_shot_mode')} ({result.get('few_shot_value')})"
+            self.logger.info(f"   🎯 Few-shot: {few_shot_info}")
+        
+        # Log failed results
+        for result in failed_results:
+            self.logger.error(f"\n💥 {result['model_type'].upper()}: FAILED")
+            self.logger.error(f"   ❌ Error: {result.get('error', 'Unknown error')}")
+        
+        # Determine winner
+        if successful_results:
+            best = max(successful_results, key=lambda x: x.get('test_accuracy', 0))
+            self.logger.info(f"\n🏅 WINNER: {best['model_type'].upper()} ({best['test_accuracy']:.2f}%)")
+            
+            # Performance analysis
+            if len(successful_results) >= 2:
+                sorted_results = sorted(successful_results, key=lambda x: x.get('test_accuracy', 0), reverse=True)
+                best_acc = sorted_results[0].get('test_accuracy', 0)
+                second_acc = sorted_results[1].get('test_accuracy', 0)
+                gap = best_acc - second_acc
+                self.logger.info(f"📊 Performance gap: {gap:.2f}% advantage")
+                
+                if gap < 2:
+                    self.logger.info("💡 Results are very close - consider statistical significance")
+                elif gap > 10:
+                    self.logger.info("💡 Significant performance difference detected")
+    
+    def log_experiment_summary(self):
+        """Log experiment completion summary."""
+        experiment_end = datetime.datetime.now()
+        total_time = experiment_end - self.experiment_start
+        
+        self.logger.info(f"\n{'='*60}")
+        self.logger.info("🏁 EXPERIMENT COMPLETE")
+        self.logger.info("=" * 60)
+        self.logger.info(f"⏰ Total experiment time: {total_time}")
+        self.logger.info(f"📊 Models tested: {len(self.model_results)}")
+        self.logger.info(f"✅ Successful: {len([r for r in self.model_results if r.get('success', False)])}")
+        self.logger.info(f"❌ Failed: {len([r for r in self.model_results if not r.get('success', False)])}")
+        self.logger.info(f"📄 Log saved: {self.log_filename}")
+    
+    def save_comparison_results(self, results: List[Dict]) -> str:
+        """Save comparison results to JSON file."""
+        experiment_end = datetime.datetime.now()
+        
+        comparison_data = {
+            'session_id': self.session_id,
+            'timestamp': self.timestamp,
+            'start_time': self.experiment_start.isoformat(),
+            'end_time': experiment_end.isoformat(),
+            'total_time': str(experiment_end - self.experiment_start),
+            'experiment_metadata': self.experiment_metadata,
+            'model_results': results,
+            'summary': {
+                'total_models': len(results),
+                'successful_models': len([r for r in results if r.get('success', False)]),
+                'failed_models': len([r for r in results if not r.get('success', False)]),
+                'winner': max(results, key=lambda x: x.get('test_accuracy', 0)) if results else None
+            },
+            'files': {
+                'log_file': str(self.log_filename)
+            }
+        }
+        
+        results_file = self.results_dir / f"comparison_{self.session_id}.json"
+        with open(results_file, 'w') as f:
+            json.dump(comparison_data, f, indent=2, default=str)
+        
+        self.logger.info(f"📊 Comparison results saved: {results_file}")
+        return str(results_file)
+
+
 class DataSplitterLogger:
     """Simple logging for data splitting operations."""
     

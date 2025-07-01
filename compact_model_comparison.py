@@ -28,6 +28,7 @@ try:
     import model_setup # type: ignore
     import training # type: ignore
     import evaluation # type: ignore
+    from logger_manager import ComparisonLogger # type: ignore
     print("✅ All modules imported successfully")
 except ImportError as e:
     print(f"❌ Import error: {e}")
@@ -129,12 +130,8 @@ class SimpleConfig:
         if not hasattr(self, 'RANDOM_STATE'):
             self.RANDOM_STATE = getattr(config_module, 'RANDOM_STATE', 42)
 
-def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_value=0.1):
+def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_value=0.1, comparison_logger=None):
     """Run single model training and return results"""
-    print(f"\n{'='*50}")
-    print(f"🧪 Testing {model_type.upper()}")
-    print(f"{'='*50}")
-    
     # Select config (create a simple config object that can be safely modified)
     base_config = config_dinov2 if model_type == 'dinov2' else config
     active_config = SimpleConfig(base_config)
@@ -149,15 +146,22 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         # Ensure few-shot is completely disabled in config
         setattr(active_config, 'FEW_SHOT_MODE', None)
         setattr(active_config, 'FEW_SHOT_VALUE', None)
-        print(f"🔧 Config few-shot override: DISABLED")
     else:
         # Set config few-shot to match our parameters
         setattr(active_config, 'FEW_SHOT_MODE', few_shot_mode)
         setattr(active_config, 'FEW_SHOT_VALUE', few_shot_value)
-        print(f"🔧 Config few-shot override: {few_shot_mode} ({few_shot_value})")
     
-    print(f"🔧 Model: {model_name}")
-    print(f"⚙️  Epochs: {active_config.EPOCHS}, Batch: {active_config.BATCH_SIZE}")
+    # Log model start
+    if comparison_logger:
+        config_info = {
+            'epochs': active_config.EPOCHS,
+            'batch_size': active_config.BATCH_SIZE,
+            'image_size': active_config.IMAGE_SIZE,
+            'learning_rate': active_config.LEARNING_RATE,
+            'few_shot_mode': few_shot_mode,
+            'few_shot_value': few_shot_value
+        }
+        comparison_logger.log_model_start(model_type, model_name, config_info)
     
     start_time = time.time()
     
@@ -176,30 +180,54 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         total_original = original_train_size + original_val_size + original_test_size
         
         if sample_size and sample_size < total_original:
-            # Calculate limited sizes (don't use min with original sizes - causes test=0)
-            train_size = sample_size * 70 // 100
-            val_size = sample_size * 15 // 100  
-            test_size = sample_size - train_size - val_size  # Ensure all samples are used
-            
-            # Ensure minimum sizes (at least 1 sample per class)
+            # Calculate limited sizes with better distribution
             min_classes = len(set(train_labels))
-            train_size = max(train_size, min_classes)
-            val_size = max(val_size, 1)
-            test_size = max(test_size, 1)
             
-            # Adjust if total exceeds sample_size after minimums
-            total_after_min = train_size + val_size + test_size
-            if total_after_min > sample_size:
-                # Scale down proportionally
-                scale = sample_size / total_after_min
-                train_size = max(int(train_size * scale), min_classes)
-                val_size = max(int(val_size * scale), 1)
-                test_size = sample_size - train_size - val_size
+            # Calculate proportional sizes
+            train_size = max(sample_size * 70 // 100, min_classes)
+            val_size = max(sample_size * 15 // 100, min_classes // 2)  # At least half the classes
+            test_size = max(sample_size * 15 // 100, min_classes // 2)  # At least half the classes
             
-            # Randomly sample the paths BEFORE creating dataloaders
-            print(f"📊 Limiting dataset BEFORE validation: {sample_size:,} total samples")
-            print(f"   Original: {original_train_size:,} train, {original_val_size:,} val, {original_test_size:,} test")
-            print(f"   Limited:  {train_size:,} train, {val_size:,} val, {test_size:,} test")
+            # Ensure we don't exceed sample_size
+            total_calculated = train_size + val_size + test_size
+            if total_calculated > sample_size:
+                # Adjust proportionally while maintaining minimums
+                excess = total_calculated - sample_size
+                # Remove excess from train first (it's the largest)
+                train_size = max(train_size - excess, min_classes)
+                
+                # Recalculate total
+                total_calculated = train_size + val_size + test_size
+                if total_calculated > sample_size:
+                    # If still over, reduce val and test equally
+                    remaining_excess = total_calculated - sample_size
+                    val_reduction = remaining_excess // 2
+                    test_reduction = remaining_excess - val_reduction
+                    val_size = max(val_size - val_reduction, 1)
+                    test_size = max(test_size - test_reduction, 1)
+            
+            # Final safety check - ensure test_size is never 0
+            if test_size == 0:
+                test_size = min(10, sample_size // 10)  # At least 10 or 10% of sample
+                train_size = sample_size - val_size - test_size
+            
+            # Log dataset processing
+            if comparison_logger:
+                original_sizes = {'train': original_train_size, 'val': original_val_size, 'test': original_test_size}
+                final_sizes = {'train': train_size, 'val': val_size, 'test': test_size}
+                comparison_logger.log_dataset_processing(model_type, original_sizes, final_sizes)
+            
+            # Debug output
+            print(f"   📊 Dataset size limiting:")
+            print(f"      Original: {original_train_size:,} train, {original_val_size:,} val, {original_test_size:,} test")
+            print(f"      Target sample size: {sample_size:,}")
+            print(f"      Final: {train_size:,} train, {val_size:,} val, {test_size:,} test")
+            print(f"      Total after limiting: {train_size + val_size + test_size:,}")
+            
+            # Safety check
+            if test_size == 0:
+                raise ValueError(f"❌ Test size became 0! This is a critical bug. "
+                               f"Sample size: {sample_size}, Train: {train_size}, Val: {val_size}")
             
             # Sample train set
             train_indices = np.random.choice(original_train_size, size=train_size, replace=False)
@@ -316,23 +344,23 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         }
         
     except Exception as e:
-        print(f"❌ Error: {e}")
-        return {'model_type': model_type, 'success': False, 'error': str(e), 'time': time.time() - start_time}
+        error_result = {'model_type': model_type, 'success': False, 'error': str(e), 'time': time.time() - start_time}
+        if comparison_logger:
+            comparison_logger.log_model_complete(model_type, model_name, error_result)
+        return error_result
 
 def main():
     """Main comparison function"""
-    print("🥊 COMPACT MODEL COMPARISON")
-    print("="*60)
+    # Initialize comparison logger
+    comparison_logger = ComparisonLogger()
     
     # 📊 AUTO-DETECT DATASET SIZE
-    print("🔍 Getting dataset info...")
     temp_train, temp_labels, temp_val, temp_val_labels, temp_test, temp_test_labels = data_splitter.split_clean_dataset(
         pickle_path='clean_dataset.pkl',
         base_data_dir='this_studio/crop_pest_data',
         few_shot_mode=None  # Just for size detection, actual few-shot applied later
     )
     total_dataset_size = len(temp_train) + len(temp_val) + len(temp_test)
-    print(f"📊 Total dataset size: {total_dataset_size:,} samples")
     
     # 📊 DATASET SIZE Configuration:
     SAMPLE_SIZE = int(total_dataset_size * 0.1)     # ✅ CURRENTLY ACTIVE: Use 10% of dataset  
@@ -366,61 +394,35 @@ def main():
         ('dinov2', config_dinov2.MODEL_NAME)   # config_dinov2.py → e.g., 'dinov2_vits14'
     ]
     
-    print(f"🔧 Models to compare:")
-    for model_type, actual_name in model_types:
-        print(f"   {model_type.upper()}: {actual_name}")
+    # Log experiment start
+    dataset_info = {'total_dataset_size': total_dataset_size}
+    experiment_config = {
+        'sample_size': SAMPLE_SIZE,
+        'few_shot_mode': FEW_SHOT_MODE,
+        'few_shot_value': FEW_SHOT_VALUE,
+        'models': model_types
+    }
+    comparison_logger.log_experiment_start(dataset_info, experiment_config)
     
     results = []
     
     # 🚀 RUN BOTH MODELS
     for model_type, actual_name in model_types:
-        print(f"\n🎯 Running {model_type.upper()} ({actual_name})...")
-        result = run_model(model_type, SAMPLE_SIZE, FEW_SHOT_MODE, FEW_SHOT_VALUE)
+        result = run_model(model_type, SAMPLE_SIZE, FEW_SHOT_MODE, FEW_SHOT_VALUE, comparison_logger)
         results.append(result)
+        
+        # Log model completion
+        comparison_logger.log_model_complete(model_type, actual_name, result)
         
         # Clear GPU cache
         if device.type == 'cuda':
+            comparison_logger.log_gpu_cleanup()
             torch.cuda.empty_cache()
     
-    # Print comparison
-    print("\n" + "="*60)
-    print("📊 COMPARISON RESULTS")
-    print("="*60)
-    
-    for result in results:
-        if result['success']:
-            print(f"\n🏆 {result['model_type'].upper()}: {result['model_name']}")
-            print(f"   🎯 Train Accuracy: {result['train_accuracy']:.2f}%")
-            print(f"   🎯 Test Accuracy: {result['test_accuracy']:.2f}%")
-            print(f"   📈 Best Val: {result['best_val_acc']:.2f}%")
-            print(f"   ⏱️  Time: {result['time']:.1f}s")
-            
-            # Show labeled vs total samples for few-shot
-            train_samples = result['train_samples']
-            val_samples = result['val_samples']
-            test_samples = result['test_samples']
-            labeled_samples = result.get('labeled_samples', train_samples)
-            
-            if result['few_shot_mode'] is not None:
-                print(f"   📊 Samples: {train_samples} total train ({labeled_samples} labeled), {val_samples} val, {test_samples} test")
-                print(f"   🎯 Label ratio: {labeled_samples}/{train_samples} ({labeled_samples/train_samples*100:.1f}%)")
-            else:
-                print(f"   📊 Samples: {train_samples} train, {val_samples} val, {test_samples} test")
-            
-            print(f"   batch size: {result['batch_size']}")
-            print(f"   image size: {result['image_size']}")
-            print(f"   epochs: {result['epochs']}")
-            few_shot_info = 'Disabled' if result['few_shot_mode'] is None else f"{result['few_shot_mode']} ({result['few_shot_value']})"
-            print(f"   few-shot: {few_shot_info}")
-        else:
-            print(f"\n💥 {result['model_type'].upper()}: FAILED")
-            print(f"   ❌ Error: {result['error']}")
-    
-    # Winner
-    successful = [r for r in results if r['success']]
-    if successful:
-        best = max(successful, key=lambda x: x['test_accuracy'])
-        print(f"\n🏅 WINNER: {best['model_type'].upper()} ({best['test_accuracy']:.2f}%)")
+    # Log comparison results and save
+    comparison_logger.log_comparison_results(results)
+    comparison_logger.log_experiment_summary()
+    results_file = comparison_logger.save_comparison_results(results)
 
 if __name__ == "__main__":
     main() 
