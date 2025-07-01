@@ -12,8 +12,12 @@ import numpy as np
 
 # Add project paths
 current_dir = os.path.dirname(os.path.abspath(__file__))
+thesis_codes_dir = os.path.join(current_dir, 'thesis_codes')
+
 if current_dir not in sys.path:
     sys.path.append(current_dir)
+if thesis_codes_dir not in sys.path:
+    sys.path.append(thesis_codes_dir)
 
 try:
     # Import modules
@@ -103,20 +107,54 @@ def create_few_shot_loss_function(criterion, ignore_index=-1):
     
     return few_shot_loss
 
+class SimpleConfig:
+    """Simple configuration class that can be safely copied"""
+    def __init__(self, config_module):
+        # Copy all uppercase attributes from the config module
+        for attr_name in dir(config_module):
+            if attr_name.isupper() and not attr_name.startswith('_'):
+                setattr(self, attr_name, getattr(config_module, attr_name))
+        
+        # Ensure we have the essential attributes (with defaults if missing)
+        if not hasattr(self, 'MODEL_NAME'):
+            self.MODEL_NAME = getattr(config_module, 'MODEL_NAME', 'unknown_model')
+        if not hasattr(self, 'EPOCHS'):
+            self.EPOCHS = getattr(config_module, 'EPOCHS', 5)
+        if not hasattr(self, 'BATCH_SIZE'):
+            self.BATCH_SIZE = getattr(config_module, 'BATCH_SIZE', 16)
+        if not hasattr(self, 'LEARNING_RATE'):
+            self.LEARNING_RATE = getattr(config_module, 'LEARNING_RATE', 0.001)
+        if not hasattr(self, 'IMAGE_SIZE'):
+            self.IMAGE_SIZE = getattr(config_module, 'IMAGE_SIZE', (224, 224))
+        if not hasattr(self, 'RANDOM_STATE'):
+            self.RANDOM_STATE = getattr(config_module, 'RANDOM_STATE', 42)
+
 def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_value=0.1):
     """Run single model training and return results"""
     print(f"\n{'='*50}")
     print(f"🧪 Testing {model_type.upper()}")
     print(f"{'='*50}")
     
-    # Select config (make a copy to avoid modifying original)
-    import copy
-    active_config = copy.deepcopy(config_dinov2 if model_type == 'dinov2' else config)
+    # Select config (create a simple config object that can be safely modified)
+    base_config = config_dinov2 if model_type == 'dinov2' else config
+    active_config = SimpleConfig(base_config)
     model_name = active_config.MODEL_NAME
     
     # Quick config overrides for fast testing
-    active_config.EPOCHS = 3
-    active_config.BATCH_SIZE = min(16, active_config.BATCH_SIZE)
+    active_config.EPOCHS = 2
+    active_config.BATCH_SIZE = min(32, active_config.BATCH_SIZE)
+    
+    # 🔧 OVERRIDE CONFIG FEW-SHOT SETTINGS (prevent other modules from activating few-shot)
+    if few_shot_mode is None:
+        # Ensure few-shot is completely disabled in config
+        setattr(active_config, 'FEW_SHOT_MODE', None)
+        setattr(active_config, 'FEW_SHOT_VALUE', None)
+        print(f"🔧 Config few-shot override: DISABLED")
+    else:
+        # Set config few-shot to match our parameters
+        setattr(active_config, 'FEW_SHOT_MODE', few_shot_mode)
+        setattr(active_config, 'FEW_SHOT_VALUE', few_shot_value)
+        print(f"🔧 Config few-shot override: {few_shot_mode} ({few_shot_value})")
     
     print(f"🔧 Model: {model_name}")
     print(f"⚙️  Epochs: {active_config.EPOCHS}, Batch: {active_config.BATCH_SIZE}")
@@ -126,64 +164,85 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
     try:
         # Load data (use existing clean dataset) - NO few-shot here, we'll apply label hiding later
         train_paths, train_labels, val_paths, val_labels, test_paths, test_labels = data_splitter.split_clean_dataset(
-            pickle_path='/teamspace/studios/this_studio/thesis_codes/clean_dataset.pkl',
+            pickle_path='/teamspace/studios/this_studio/clean_dataset.pkl',
             base_data_dir='/teamspace/studios/this_studio/crop_pest_data',
             few_shot_mode=None  # Don't reduce dataset size
         )
         
-        # 🎯 TRUE FEW-SHOT: Hide labels instead of reducing dataset size
+        # 📊 LIMIT DATASET SIZE FIRST (before validation!)
         original_train_size = len(train_paths)
-        labeled_samples_count = original_train_size
+        original_val_size = len(val_paths)
+        original_test_size = len(test_paths)
+        total_original = original_train_size + original_val_size + original_test_size
         
+        if sample_size and sample_size < total_original:
+            # Calculate limited sizes (don't use min with original sizes - causes test=0)
+            train_size = sample_size * 70 // 100
+            val_size = sample_size * 15 // 100  
+            test_size = sample_size - train_size - val_size  # Ensure all samples are used
+            
+            # Ensure minimum sizes (at least 1 sample per class)
+            min_classes = len(set(train_labels))
+            train_size = max(train_size, min_classes)
+            val_size = max(val_size, 1)
+            test_size = max(test_size, 1)
+            
+            # Adjust if total exceeds sample_size after minimums
+            total_after_min = train_size + val_size + test_size
+            if total_after_min > sample_size:
+                # Scale down proportionally
+                scale = sample_size / total_after_min
+                train_size = max(int(train_size * scale), min_classes)
+                val_size = max(int(val_size * scale), 1)
+                test_size = sample_size - train_size - val_size
+            
+            # Randomly sample the paths BEFORE creating dataloaders
+            print(f"📊 Limiting dataset BEFORE validation: {sample_size:,} total samples")
+            print(f"   Original: {original_train_size:,} train, {original_val_size:,} val, {original_test_size:,} test")
+            print(f"   Limited:  {train_size:,} train, {val_size:,} val, {test_size:,} test")
+            
+            # Sample train set
+            train_indices = np.random.choice(original_train_size, size=train_size, replace=False)
+            train_paths = [train_paths[i] for i in train_indices]
+            train_labels = [train_labels[i] for i in train_indices]
+            
+            # Sample val set
+            val_indices = np.random.choice(original_val_size, size=val_size, replace=False)
+            val_paths = [val_paths[i] for i in val_indices]
+            val_labels = [val_labels[i] for i in val_indices]
+            
+            # Sample test set
+            test_indices = np.random.choice(original_test_size, size=test_size, replace=False)
+            test_paths = [test_paths[i] for i in test_indices]
+            test_labels = [test_labels[i] for i in test_indices]
+            
+            print(f"   ✅ Pre-sampled {len(train_paths) + len(val_paths) + len(test_paths):,} paths before validation")
+        
+        # 🎯 TRUE FEW-SHOT: Hide labels instead of reducing dataset size
+        labeled_samples_count = len(train_paths)
+        
+        print(f"🔧 Few-shot check: mode={few_shot_mode}, value={few_shot_value}")
         if few_shot_mode is not None:
+            print(f"🎯 COMPACT SCRIPT: Applying few-shot label hiding...")
             train_paths, train_labels, labeled_mask = apply_label_hiding_few_shot(
                 train_paths, train_labels, few_shot_mode, few_shot_value, 
                 active_config.RANDOM_STATE if hasattr(active_config, 'RANDOM_STATE') else 42
             )
             labeled_samples_count = sum(labeled_mask)
-            print(f"🎯 Label Hiding Applied: {labeled_samples_count}/{original_train_size} samples have labels")
+            print(f"🎯 COMPACT SCRIPT: Label Hiding Applied: {labeled_samples_count}/{len(train_paths)} samples have labels")
         else:
-            print(f"🎯 Few-shot disabled: All {original_train_size} samples have labels")
+            print(f"🎯 COMPACT SCRIPT: Few-shot DISABLED - All {len(train_paths)} samples have labels")
         
-        # Create dataloaders
+        # Create dataloaders (now with limited dataset - much faster validation!)
         train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset = dataloader_setup.create_dataloaders(
             train_paths, train_labels, val_paths, val_labels, test_paths, test_labels,
             config_module=active_config, run_batch_test=False
         )
         
-        # Get original dataset info before subsetting
-        original_train_dataset = train_dataset
+        # Get dataset info
         num_classes = len(train_dataset.classes)
         class_names = train_dataset.classes
         class_to_idx = train_dataset.class_to_idx
-        
-        # 📊 SAMPLE SIZE LIMITING (if requested)
-        if sample_size and sample_size < len(train_loader.dataset):
-            train_size = min(sample_size * 70 // 100, len(train_loader.dataset))
-            val_size = min(sample_size * 15 // 100, len(val_loader.dataset))
-            test_size = min(sample_size * 15 // 100, len(test_loader.dataset))
-            
-            # Ensure minimum sizes
-            train_size = max(train_size, num_classes)
-            val_size = max(val_size, 1)
-            test_size = max(test_size, 1)
-            
-            train_indices = np.random.choice(len(train_loader.dataset), size=train_size, replace=False).tolist()
-            val_indices = np.random.choice(len(val_loader.dataset), size=val_size, replace=False).tolist()
-            test_indices = np.random.choice(len(test_loader.dataset), size=test_size, replace=False).tolist()
-            
-            from torch.utils.data import DataLoader
-            train_loader = DataLoader(Subset(train_dataset, train_indices), 
-                                    batch_size=active_config.BATCH_SIZE, shuffle=True)
-            val_loader = DataLoader(Subset(val_dataset, val_indices), 
-                                  batch_size=active_config.BATCH_SIZE, shuffle=False)
-            test_loader = DataLoader(Subset(test_dataset, test_indices), 
-                                   batch_size=active_config.BATCH_SIZE, shuffle=False)
-            
-            print(f"📊 Dataset limited to: Train={train_size}, Val={val_size}, Test={test_size}")
-            # Update labeled samples count if we reduced dataset size after few-shot
-            if few_shot_mode is not None and sample_size < original_train_size:
-                labeled_samples_count = min(labeled_samples_count, train_size)
         
         # Create model
         model = model_setup.create_model(num_classes, model_name, active_config).to(device)
@@ -233,23 +292,20 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         end_time = time.time()
         
         # Calculate actual dataset sizes
-        try:
-            train_subset = train_loader.dataset
-            test_subset = test_loader.dataset
-            train_size_actual = len(train_subset) if isinstance(train_subset, Subset) else 0
-            test_size_actual = len(test_subset) if isinstance(test_subset, Subset) else 0
-        except:
-            train_size_actual = len(train_paths) if 'train_paths' in locals() else 0
-            test_size_actual = len(test_paths) if 'test_paths' in locals() else 0
+        train_size_actual = len(train_loader.dataset)
+        val_size_actual = len(val_loader.dataset)
+        test_size_actual = len(test_loader.dataset)
         
         return {
             'model_type': model_type,
             'model_name': model_name,
             'success': True,
             'time': end_time - start_time,
+            'train_accuracy': train_result.get('train_accuracy', 0),
             'test_accuracy': test_result['test_accuracy'],
             'best_val_acc': train_result.get('best_val_acc', 0),
             'train_samples': train_size_actual,
+            'val_samples': val_size_actual,
             'labeled_samples': labeled_samples_count,
             'test_samples': test_size_actual,
             'batch_size': active_config.BATCH_SIZE,
@@ -271,7 +327,7 @@ def main():
     # 📊 AUTO-DETECT DATASET SIZE
     print("🔍 Getting dataset info...")
     temp_train, temp_labels, temp_val, temp_val_labels, temp_test, temp_test_labels = data_splitter.split_clean_dataset(
-        pickle_path='/teamspace/studios/this_studio/thesis_codes/clean_dataset.pkl',
+        pickle_path='/teamspace/studios/this_studio/clean_dataset.pkl',
         base_data_dir='/teamspace/studios/this_studio/crop_pest_data',
         few_shot_mode=None  # Just for size detection, actual few-shot applied later
     )
@@ -279,8 +335,8 @@ def main():
     print(f"📊 Total dataset size: {total_dataset_size:,} samples")
     
     # 📊 DATASET SIZE Configuration:
-    SAMPLE_SIZE = None                              # Use full dataset (~25K samples)
-    # SAMPLE_SIZE = int(total_dataset_size * 0.1)   # Use 10% of dataset  
+    SAMPLE_SIZE = int(total_dataset_size * 0.1)     # ✅ CURRENTLY ACTIVE: Use 10% of dataset  
+    # SAMPLE_SIZE = None                            # Use full dataset (~25K samples)
     # SAMPLE_SIZE = int(total_dataset_size * 0.01)  # Use 1% of dataset
     # SAMPLE_SIZE = 500                             # Use exactly 500 samples
     
@@ -293,7 +349,11 @@ def main():
     # 💡 TRUE FEW-SHOT means: Model sees ALL images but most labels are hidden (-1)
     # 💡 This is different from dataset reduction (which would show fewer images)
     
-    print(f"🎯 Dataset: {'Full dataset' if SAMPLE_SIZE is None else f'{SAMPLE_SIZE} samples'}")
+    if SAMPLE_SIZE is None:
+        print(f"🎯 Dataset: Full dataset ({total_dataset_size:,} samples)")
+    else:
+        percentage = (SAMPLE_SIZE / total_dataset_size) * 100
+        print(f"🎯 Dataset: {SAMPLE_SIZE:,} samples ({percentage:.1f}% of {total_dataset_size:,})")
     if FEW_SHOT_MODE is None:
         print(f"🎯 Few-shot: Disabled (all images have labels)")
     else:
@@ -330,18 +390,22 @@ def main():
     for result in results:
         if result['success']:
             print(f"\n🏆 {result['model_type'].upper()}: {result['model_name']}")
+            print(f"   🎯 Train Accuracy: {result['train_accuracy']:.2f}%")
             print(f"   🎯 Test Accuracy: {result['test_accuracy']:.2f}%")
             print(f"   📈 Best Val: {result['best_val_acc']:.2f}%")
             print(f"   ⏱️  Time: {result['time']:.1f}s")
             
             # Show labeled vs total samples for few-shot
             train_samples = result['train_samples']
+            val_samples = result['val_samples']
+            test_samples = result['test_samples']
             labeled_samples = result.get('labeled_samples', train_samples)
+            
             if result['few_shot_mode'] is not None:
-                print(f"   📊 Samples: {train_samples} total train ({labeled_samples} labeled), {result['test_samples']} test")
+                print(f"   📊 Samples: {train_samples} total train ({labeled_samples} labeled), {val_samples} val, {test_samples} test")
                 print(f"   🎯 Label ratio: {labeled_samples}/{train_samples} ({labeled_samples/train_samples*100:.1f}%)")
             else:
-                print(f"   📊 Samples: {train_samples} train, {result['test_samples']} test")
+                print(f"   📊 Samples: {train_samples} train, {val_samples} val, {test_samples} test")
             
             print(f"   batch size: {result['batch_size']}")
             print(f"   image size: {result['image_size']}")
