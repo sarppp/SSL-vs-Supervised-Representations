@@ -3,7 +3,7 @@ import multiprocessing as mp
 # Dataset Configuration for DINOv2
 IMAGE_SIZE = (224, 224)  # DINOv2 typically works well with 224x224
 BATCH_SIZE = 32  # Smaller batch size due to larger models
-NUM_WORKERS = 0
+NUM_WORKERS = 0  # Keep at 0 to avoid file access issues
 MAX_WORKERS = mp.cpu_count()
 
 # Learning Rate Warmup (more important for DINOv2)
@@ -31,7 +31,7 @@ MODEL_NAME = 'dinov2_vitb14'  # Default to base model
 # DINOv2-specific Training Configuration
 LEARNING_RATE = 0.0001  # Much lower LR for self-supervised models
 WEIGHT_DECAY = 0.05    # Higher weight decay
-EPOCHS = 10          # More epochs often needed for DINOv2
+EPOCHS = 2          # More epochs often needed for DINOv2
 PATIENCE = 7           # More patience for LR scheduler
 LR_FACTOR = 0.3        # More aggressive LR reduction
 DROPOUT = 0.1          # Lower dropout
@@ -175,5 +175,5 @@ COMPILE_MODEL = True  # Set to True for PyTorch 2.0+ speedup
 COMPILE_MODE = 'default'  # Options: 'default', 'reduce-overhead', 'max-autotune'
 
 # Few-Shot Learning
-FEW_SHOT_MODE = 'percentage'  # Options: None, 'percentage', 'per_class'
+FEW_SHOT_MODE = None  # Options: None, 'percentage', 'per_class'
 FEW_SHOT_VALUE = 0.1  # 0.1 = 10%, 0.01 = 1%, or samples per class

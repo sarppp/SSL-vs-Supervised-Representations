@@ -20,10 +20,21 @@ def create_dataloaders(train_paths, train_labels, val_paths, val_labels, test_pa
     val_dataset = custom_dataset.CustomCropDataset(val_paths, val_labels, transform=val_transform, fallback_size=config_module.IMAGE_SIZE)
     test_dataset = custom_dataset.CustomCropDataset(test_paths, test_labels, transform=test_transform, fallback_size=config_module.IMAGE_SIZE)
     
+    # 🔧 FIX: Use smaller batch size for large test sets to reduce memory pressure
+    train_batch_size = config_module.BATCH_SIZE
+    val_batch_size = config_module.BATCH_SIZE
+    test_batch_size = config_module.BATCH_SIZE
+    
+    # Reduce test batch size if test set is large to prevent memory issues
+    if len(test_dataset) > 1000:
+        test_batch_size = min(16, config_module.BATCH_SIZE)  # Max 16 for large test sets
+        print(f"🔧 Large test set detected ({len(test_dataset)} samples)")
+        print(f"   Reducing test batch size: {config_module.BATCH_SIZE} → {test_batch_size}")
+    
     # Create DataLoaders
-    train_loader = DataLoader(train_dataset, batch_size=config_module.BATCH_SIZE, shuffle=True, num_workers=config_module.NUM_WORKERS)
-    val_loader = DataLoader(val_dataset, batch_size=config_module.BATCH_SIZE, shuffle=False, num_workers=config_module.NUM_WORKERS)
-    test_loader = DataLoader(test_dataset, batch_size=config_module.BATCH_SIZE, shuffle=False, num_workers=config_module.NUM_WORKERS)
+    train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True, num_workers=config_module.NUM_WORKERS)
+    val_loader = DataLoader(val_dataset, batch_size=val_batch_size, shuffle=False, num_workers=config_module.NUM_WORKERS)
+    test_loader = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=False, num_workers=config_module.NUM_WORKERS)
     
     # Print summary
     total_images = len(train_dataset) + len(val_dataset) + len(test_dataset)
@@ -31,7 +42,7 @@ def create_dataloaders(train_paths, train_labels, val_paths, val_labels, test_pa
     print(f"Training: {len(train_dataset)} samples ({len(train_dataset)/total_images*100:.1f}%)")
     print(f"Validation: {len(val_dataset)} samples ({len(val_dataset)/total_images*100:.1f}%)")
     print(f"Test: {len(test_dataset)} samples ({len(test_dataset)/total_images*100:.1f}%)")
-    print(f"Batch size: {config_module.BATCH_SIZE}")
+    print(f"Batch sizes: Train={train_batch_size}, Val={val_batch_size}, Test={test_batch_size}")
     print(f"Num workers: {config_module.NUM_WORKERS}")
     print(f"Training batches per epoch: {len(train_loader)}")
     print(f"Validation batches: {len(val_loader)}")

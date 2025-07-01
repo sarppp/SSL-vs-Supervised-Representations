@@ -17,8 +17,15 @@ def evaluate_model(model, test_loader, device, class_names, use_amp=False, eval_
     all_true_labels = []
     all_probabilities = []
     
+    # 🔧 FIX: Process in smaller chunks to reduce memory pressure
+    print(f"🔍 Evaluating {len(test_loader.dataset)} samples in {len(test_loader)} batches...")
+    
     with torch.no_grad():
         for batch_idx, (images, labels) in enumerate(test_loader):
+            # 🔧 Add progress info for large test sets
+            if batch_idx % 20 == 0:
+                print(f"   Processing batch {batch_idx+1}/{len(test_loader)}...")
+                
             images, labels = images.to(device), labels.to(device)
             
             if use_amp:
@@ -34,6 +41,10 @@ def evaluate_model(model, test_loader, device, class_names, use_amp=False, eval_
             all_predictions.extend(predicted.cpu().numpy())
             all_true_labels.extend(labels.cpu().numpy())
             all_probabilities.extend(probabilities.cpu().numpy())
+            
+            # 🔧 FIX: Clear GPU cache periodically during large evaluations
+            if batch_idx % 20 == 0 and torch.cuda.is_available():
+                torch.cuda.empty_cache()
     
     # Convert to numpy arrays
     y_true = np.array(all_true_labels)
@@ -45,6 +56,8 @@ def evaluate_model(model, test_loader, device, class_names, use_amp=False, eval_
     
     if eval_logger:
         eval_logger.log_test_accuracy(test_accuracy)
+    
+    print(f"✅ Evaluation complete: {test_accuracy:.2f}% accuracy on {len(y_true)} samples")
     
     return y_true, y_pred, y_prob, test_accuracy
 

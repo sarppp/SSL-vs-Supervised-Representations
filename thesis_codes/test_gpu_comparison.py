@@ -555,13 +555,31 @@ def main():
     for model_name, model_config in models_to_test:
         print(f"\n🔧 Preparing {model_name} with {model_config.__name__}")
         
-        # 📁 REAL DATA LOADING:
-        from data_loader import load_image_paths_and_labels
+        # 📁 REAL DATA LOADING FROM CLEANED PICKLE FILE:
+        from data_splitter import split_clean_dataset
         from dataloader_setup import create_dataloaders
         
-        # Load data from folder structure
-        data_dir = '/teamspace/studios/this_studio/crop_pest_data'  # Change to your dataset path
-        image_paths, labels = load_image_paths_and_labels(data_dir)
+        # Load data from cleaned pickle file (avoids corrupted files)
+        data_dir = '/teamspace/studios/this_studio/crop_pest_data'  # Base data directory
+        pickle_path = '/teamspace/studios/this_studio/thesis_codes/clean_dataset.pkl'  # Cleaned dataset pickle
+        
+        print(f"📁 Loading cleaned dataset from pickle file: {pickle_path}")
+        
+        # Use data_splitter to load the cleaned dataset (this avoids corrupted files)
+        # We'll get the full dataset first, then apply our custom splitting
+        temp_train_paths, temp_train_labels, temp_val_paths, temp_val_labels, temp_test_paths, temp_test_labels = split_clean_dataset(
+            pickle_path=pickle_path,
+            test_size=0.15,  # Temporary split just to get all data
+            val_size=0.15,   # We'll re-split later with our custom logic
+            random_state=model_config.RANDOM_STATE,
+            base_data_dir=data_dir,
+            few_shot_mode=None,  # We'll handle few-shot separately
+            few_shot_value=0.1
+        )
+        
+        # Combine all splits back into full dataset (since we want to apply custom splitting)
+        image_paths = temp_train_paths + temp_val_paths + temp_test_paths
+        labels = temp_train_labels + temp_val_labels + temp_test_labels
         
         # Create class mappings
         class_names = sorted(list(set(labels)))
@@ -569,10 +587,10 @@ def main():
         label_indices = [class_to_idx[label] for label in labels]
         num_classes = len(class_names)
         
-        print(f"📊 Dataset info:")
+        print(f"📊 Dataset info (from cleaned pickle):")
         print(f"   Classes found: {num_classes}")
         print(f"   Class names: {class_names}")
-        print(f"   Total samples: {len(image_paths)}")
+        print(f"   Total samples: {len(image_paths)} (corrupted files already removed)")
         print(f"   Label range: [{min(label_indices)}, {max(label_indices)}]")
         
         # 📊 Calculate independent split sizes

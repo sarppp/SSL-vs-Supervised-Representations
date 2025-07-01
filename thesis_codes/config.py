@@ -3,7 +3,7 @@ import multiprocessing as mp
 # Dataset Configuration
 IMAGE_SIZE = (320, 320)
 BATCH_SIZE = 32
-NUM_WORKERS = 0
+NUM_WORKERS = 0  # Keep at 0 to avoid file access issues
 MAX_WORKERS = mp.cpu_count()
 
 # Learning Rate Warmup

@@ -31,7 +31,7 @@ MODEL_NAME = 'efficientnet_b0'  # Fastest on CPU
 # Training Configuration - CPU Optimized
 LEARNING_RATE = 0.01  # Higher LR for faster convergence with small data
 WEIGHT_DECAY = 0.01
-EPOCHS = 20  # More epochs for small dataset
+EPOCHS = 2  # More epochs for small dataset
 PATIENCE = 5
 LR_FACTOR = 0.5
 DROPOUT = 0.3
