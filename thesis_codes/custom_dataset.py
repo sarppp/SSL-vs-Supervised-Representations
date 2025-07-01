@@ -22,9 +22,11 @@ class CustomCropDataset(Dataset):
         self._validated_cache = {}
 
         # Create a mapping from class names to integer labels
-        self.classes = sorted(list(set(labels)))
+        # Convert all labels to strings to handle mixed int/string labels
+        string_labels = [str(label) for label in labels]
+        self.classes = sorted(list(set(string_labels)))
         self.class_to_idx = {cls_name: i for i, cls_name in enumerate(self.classes)}
-        self.targets = [self.class_to_idx[label] for label in labels]
+        self.targets = [self.class_to_idx[str(label)] for label in labels]
         
         # 🔍 Pre-validate images during initialization to catch corruption early
         if self.validate_images:

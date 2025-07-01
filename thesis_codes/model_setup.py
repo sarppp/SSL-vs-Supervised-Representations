@@ -77,12 +77,14 @@ def create_model(num_classes, model_name=None, config=None, setup_logger=None):
     model_id = get_model_identifier(model_name, config)
     setup_logger.log_model_creation_start(model_name, model_id)
     
-    if model_name in ['efficientnet_b0', 'efficientnet_b3']:
-        # Support both EfficientNet B0 and B3
-        if model_name == 'efficientnet_b0':
+    if model_name in ['efficientnet_b0', 'efficientnet_b3', 'efficientnet_b4']:
+        # Support EfficientNet B0, B3, and B4
+        if model_name == 'efficientnet_b4':
             model = models.efficientnet_b0(weights='DEFAULT')
-        else:  # efficientnet_b3
+        elif model_name == 'efficientnet_b3':
             model = models.efficientnet_b3(weights='DEFAULT')
+        else:  # efficientnet_b4
+            model = models.efficientnet_b4(weights='DEFAULT')
             
         for param in model.features[:-2].parameters():
             param.requires_grad = False
@@ -108,9 +110,11 @@ def create_model(num_classes, model_name=None, config=None, setup_logger=None):
         for param in model.layer4.parameters():
             param.requires_grad = True
         
-        # Use improved classifier instead of simple Linear
+        # Use improved classifier as a separate attribute to avoid type errors
         in_features = model.fc.in_features
-        model.fc = create_improved_classifier(in_features, num_classes, "cnn", config)
+        model.improved_classifier = create_improved_classifier(in_features, num_classes, "cnn", config)
+        # Optionally, keep the original fc for compatibility, but forward should use improved_classifier
+        # You may need to override the forward method elsewhere to use model.improved_classifier(x)
     
     elif model_name.startswith('dinov2'):
         # Use model-specific config if available

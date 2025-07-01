@@ -7,10 +7,13 @@ def calculate_class_weights(train_labels, class_names):
     """Calculate class weights for handling imbalanced datasets."""
     print(f"⚖️  Calculating class weights for balanced training...")
     
+    # Convert all labels to strings to handle mixed int/string labels
+    string_train_labels = [str(label) for label in train_labels]
+    
     # Calculate class weights
-    unique_labels = sorted(list(set(train_labels)))
+    unique_labels = sorted(list(set(string_train_labels)))
     unique_labels_array = np.array(unique_labels)
-    train_labels_array = np.array(train_labels)
+    train_labels_array = np.array(string_train_labels)
 
     class_weights = compute_class_weight('balanced', classes=unique_labels_array, y=train_labels_array)
     class_weights_dict = dict(zip(unique_labels, class_weights))
