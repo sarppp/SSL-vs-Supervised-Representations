@@ -1,7 +1,7 @@
 import multiprocessing as mp
 
 # Dataset Configuration for DINOv2
-IMAGE_SIZE = (380, 380)  # DINOv2 typically works well with 224x224
+IMAGE_SIZE = (378, 378)  # DINOv2 typically works well with 224x224
 BATCH_SIZE = 64  # Smaller batch size due to larger models
 NUM_WORKERS = 0  # Keep at 0 to avoid file access issues
 MAX_WORKERS = mp.cpu_count()
@@ -28,12 +28,12 @@ AVAILABLE_MODELS = [
 MODEL_NAME = 'dinov2_vits14'  # Default to base model
 
 # DINOv2-specific Training Configuration
-LEARNING_RATE = 0.0001  # Much lower LR for self-supervised models
-WEIGHT_DECAY = 0.05    # Higher weight decay
-EPOCHS = 2          # More epochs often needed for DINOv2
-PATIENCE = 7           # More patience for LR scheduler
-LR_FACTOR = 0.3        # More aggressive LR reduction
-DROPOUT = 0.1          # Lower dropout
+LEARNING_RATE = 0.001   # Higher LR for fine-tuning (was too low at 0.0001)
+WEIGHT_DECAY = 0.01     # Reduced weight decay
+EPOCHS = 15             # More epochs needed for DINOv2 (was only 2!)
+PATIENCE = 7            # More patience for LR scheduler
+LR_FACTOR = 0.3         # More aggressive LR reduction
+DROPOUT = 0.1           # Lower dropout
 
 # Research Paper Settings
 USE_SIMPLE_HEAD = True  # Use simple linear heads for fair comparison
@@ -42,25 +42,29 @@ USE_SIMPLE_HEAD = True  # Use simple linear heads for fair comparison
 # Model-specific configurations
 MODEL_CONFIGS = {
     'dinov2_vits14': {
-        'learning_rate': 0.0005,
-        'weight_decay': 0.03,
+        'learning_rate': 0.001,   # Increased from 0.0005
+        'weight_decay': 0.01,     # Reduced from 0.03
         'dropout': 0.1
     },
     'dinov2_vitb14': {
-        'learning_rate': 0.0001,
-        'weight_decay': 0.05,
+        'learning_rate': 0.0008,  # Increased from 0.0001
+        'weight_decay': 0.01,     # Reduced from 0.05
         'dropout': 0.1
     },
     'dinov2_vitl14': {
-        'learning_rate': 0.00005,
-        'weight_decay': 0.07,
+        'learning_rate': 0.0005,  # Increased from 0.00005
+        'weight_decay': 0.01,     # Reduced from 0.07
         'dropout': 0.15
     }
 }
 
+#Frozen: FREEZE_BACKBONE = True, UNFREEZE_AFTER_EPOCH = 999 (never unfreeze)
+#Progressive: FREEZE_BACKBONE = True, UNFREEZE_AFTER_EPOCH = 3 (current setting)
+#Full Fine-tune: FREEZE_BACKBONE = False (fine-tune from start)
+
 # DINOv2 Training Strategy
-FREEZE_BACKBONE = True     # Start with frozen backbone
-UNFREEZE_AFTER_EPOCH = 10  # Unfreeze backbone after N epochs for fine-tuning
+FREEZE_BACKBONE = True     # Start frozen for stability, then fine-tune
+UNFREEZE_AFTER_EPOCH = 3   # Unfreeze early to allow domain adaptation  
 UNFREEZE_LR_FACTOR = 0.1   # Reduce LR when unfreezing
 
 # Optimizer Configuration (DINOv2 often works better with AdamW)

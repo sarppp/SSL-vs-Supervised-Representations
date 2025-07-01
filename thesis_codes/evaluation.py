@@ -4,7 +4,7 @@ from sklearn.metrics import classification_report, accuracy_score
 from collections import Counter
 import matplotlib.pyplot as plt
 import seaborn as sns
-from torch.cuda.amp import autocast
+from torch.amp import autocast
 import json
 import os
 from datetime import datetime
@@ -29,7 +29,7 @@ def evaluate_model(model, test_loader, device, class_names, use_amp=False, eval_
             images, labels = images.to(device), labels.to(device)
             
             if use_amp:
-                with autocast():
+                with autocast('cuda'):
                     outputs = model(images)
             else:
                 outputs = model(images)

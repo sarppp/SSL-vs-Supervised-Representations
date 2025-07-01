@@ -164,8 +164,8 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
     try:
         # Load data (use existing clean dataset) - NO few-shot here, we'll apply label hiding later
         train_paths, train_labels, val_paths, val_labels, test_paths, test_labels = data_splitter.split_clean_dataset(
-            pickle_path='/teamspace/studios/this_studio/clean_dataset.pkl',
-            base_data_dir='/teamspace/studios/this_studio/crop_pest_data',
+            pickle_path='clean_dataset.pkl',
+            base_data_dir='crop_pest_data',
             few_shot_mode=None  # Don't reduce dataset size
         )
         
@@ -301,7 +301,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             'model_name': model_name,
             'success': True,
             'time': end_time - start_time,
-            'train_accuracy': train_result.get('train_accuracy', 0),
+            'train_accuracy': train_result.get('train_accuracies', [0])[-1],  # Get final training accuracy
             'test_accuracy': test_result['test_accuracy'],
             'best_val_acc': train_result.get('best_val_acc', 0),
             'train_samples': train_size_actual,
@@ -327,8 +327,8 @@ def main():
     # 📊 AUTO-DETECT DATASET SIZE
     print("🔍 Getting dataset info...")
     temp_train, temp_labels, temp_val, temp_val_labels, temp_test, temp_test_labels = data_splitter.split_clean_dataset(
-        pickle_path='/teamspace/studios/this_studio/clean_dataset.pkl',
-        base_data_dir='/teamspace/studios/this_studio/crop_pest_data',
+        pickle_path='clean_dataset.pkl',
+        base_data_dir='this_studio/crop_pest_data',
         few_shot_mode=None  # Just for size detection, actual few-shot applied later
     )
     total_dataset_size = len(temp_train) + len(temp_val) + len(temp_test)

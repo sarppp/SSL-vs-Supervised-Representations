@@ -79,12 +79,14 @@ def create_model(num_classes, model_name=None, config=None, setup_logger=None):
     
     if model_name in ['efficientnet_b0', 'efficientnet_b3', 'efficientnet_b4']:
         # Support EfficientNet B0, B3, and B4
-        if model_name == 'efficientnet_b4':
+        if model_name == 'efficientnet_b0':
             model = models.efficientnet_b0(weights='DEFAULT')
         elif model_name == 'efficientnet_b3':
             model = models.efficientnet_b3(weights='DEFAULT')
-        else:  # efficientnet_b4
+        elif model_name == 'efficientnet_b4':
             model = models.efficientnet_b4(weights='DEFAULT')
+        else:
+            raise ValueError(f"Unsupported EfficientNet variant: {model_name}")
             
         for param in model.features[:-2].parameters():
             param.requires_grad = False
@@ -122,6 +124,10 @@ def create_model(num_classes, model_name=None, config=None, setup_logger=None):
         if model_name in model_configs:
             model_config = model_configs[model_name]
             setup_logger.log_model_config(model_name, model_config)
+            # Override config values with model-specific ones
+            config.LEARNING_RATE = model_config['learning_rate']
+            config.WEIGHT_DECAY = model_config['weight_decay']
+            config.DROPOUT = model_config['dropout']
         
         try:
             # Load pre-trained DINOv2 model

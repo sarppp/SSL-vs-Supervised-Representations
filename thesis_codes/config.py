@@ -31,7 +31,7 @@ MODEL_NAME = 'efficientnet_b4'  # Default model
 # Training Configuration
 LEARNING_RATE = 0.001
 WEIGHT_DECAY = 0.01
-EPOCHS = 10
+EPOCHS = 15  # Increased to match DINOV2 for fair comparison
 PATIENCE = 3  # For LR scheduler
 LR_FACTOR = 0.5
 DROPOUT = 0.2
