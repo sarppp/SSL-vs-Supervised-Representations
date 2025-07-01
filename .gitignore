@@ -1,0 +1,28 @@
+# Python cache and virtual env
+__pycache__/
+*.py[cod]
+venv/
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Environment and config
+.env
+*.env
+config.yaml
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Model outputs
+checkpoints/
+*.ckpt
+*.h5
+
+# Temporary files
+*.tmp
+*.swp
