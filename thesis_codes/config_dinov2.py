@@ -1,8 +1,8 @@
 import multiprocessing as mp
 
 # Dataset Configuration for DINOv2
-IMAGE_SIZE = (224, 224)  # DINOv2 typically works well with 224x224
-BATCH_SIZE = 32  # Smaller batch size due to larger models
+IMAGE_SIZE = (380, 380)  # DINOv2 typically works well with 224x224
+BATCH_SIZE = 64  # Smaller batch size due to larger models
 NUM_WORKERS = 0  # Keep at 0 to avoid file access issues
 MAX_WORKERS = mp.cpu_count()
 
@@ -24,9 +24,8 @@ AVAILABLE_MODELS = [
     'dinov2_vits14',  # DINOv2 small (384 dim)
     'dinov2_vitb14',  # DINOv2 base (768 dim)
     'dinov2_vitl14',  # DINOv2 large (1024 dim)
-    'dinov2_vitg14',  # DINOv2 giant (1536 dim)
 ]
-MODEL_NAME = 'dinov2_vitb14'  # Default to base model
+MODEL_NAME = 'dinov2_vits14'  # Default to base model
 
 # DINOv2-specific Training Configuration
 LEARNING_RATE = 0.0001  # Much lower LR for self-supervised models
@@ -44,27 +43,18 @@ USE_SIMPLE_HEAD = True  # Use simple linear heads for fair comparison
 MODEL_CONFIGS = {
     'dinov2_vits14': {
         'learning_rate': 0.0005,
-        'batch_size': 64,
         'weight_decay': 0.03,
         'dropout': 0.1
     },
     'dinov2_vitb14': {
         'learning_rate': 0.0001,
-        'batch_size': 32,
         'weight_decay': 0.05,
         'dropout': 0.1
     },
     'dinov2_vitl14': {
         'learning_rate': 0.00005,
-        'batch_size': 16,
         'weight_decay': 0.07,
         'dropout': 0.15
-    },
-    'dinov2_vitg14': {
-        'learning_rate': 0.00003,
-        'batch_size': 8,
-        'weight_decay': 0.1,
-        'dropout': 0.2
     }
 }
 
