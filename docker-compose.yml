@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  deep-learning:
+    image: sarpk/my-cuda-dev-image:latest
+    container_name: thesis-training
+    
+    # Fix shared memory for PyTorch DataLoader workers
+    shm_size: 4gb
+    
+    # GPU access
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    # Mount your code
+    volumes:
+      - ./dino_cnn:/workspace/dino_cnn
+      - ./data:/workspace/data
+    
+    # Keep container running
+    stdin_open: true
+    tty: true
+    
+    # Working directory
+    working_dir: /workspace
+    
+    # Environment variables
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - PYTHONPATH=/workspace
+    
+    # Command to keep container alive
+    command: tail -f /dev/null 
