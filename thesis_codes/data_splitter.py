@@ -16,7 +16,7 @@ def split_clean_dataset(pickle_path, test_size=0.15, val_size=0.15, random_state
         val_size: Proportion for validation set (default 0.15 = 15%)
         random_state: Random seed for reproducibility
         base_data_dir: Base directory for relative paths (auto-detected if None)
-        few_shot_mode: None, 'percentage', or 'per_class' for few-shot learning
+        few_shot_mode: None, 'percentage', or 'per_class' for label hiding few-shot
         few_shot_value: Value for few-shot (0.01=1%, 0.1=10% for percentage; or samples per class)
         data_logger: DataSplitterLogger instance (will be created if None)
     
@@ -159,14 +159,91 @@ def split_clean_dataset(pickle_path, test_size=0.15, val_size=0.15, random_state
     # Quick data inspection
     data_logger.log_data_inspection(train_paths, train_labels, val_paths, test_paths)
     
-    # Apply few-shot learning if specified
+    # Apply label hiding few-shot if specified
     if few_shot_mode is not None:
-        train_paths, train_labels = apply_few_shot(train_paths, train_labels, few_shot_mode, few_shot_value, random_state, data_logger)
+        train_paths, train_labels = apply_label_hiding_few_shot(train_paths, train_labels, few_shot_mode, few_shot_value, random_state, data_logger)
     
     return train_paths, train_labels, val_paths, val_labels, test_paths, test_labels
 
+def apply_label_hiding_few_shot(train_paths, train_labels, mode=None, value=0.1, random_state=42, data_logger=None):
+    """
+    True few-shot learning: Keep ALL training images but hide most labels.
+    
+    Args:
+        train_paths: All training image paths
+        train_labels: All training labels  
+        mode: 'percentage' or 'per_class'
+        value: Percentage of labeled data or samples per class
+        random_state: Random seed
+    
+    Returns:
+        train_paths: ALL paths (unchanged)
+        masked_labels: Labels with most set to -1 (unlabeled)
+    """
+    if mode is None:
+        if data_logger:
+            data_logger.log_few_shot_disabled(len(train_paths))
+        return train_paths, train_labels
+    
+    if data_logger:
+        data_logger.log_few_shot_enabled(mode, value)
+    
+    total_samples = len(train_paths)
+    
+    if mode == 'percentage':
+        # Label only X% of data
+        n_labeled = int(total_samples * value)
+        labeled_indices = np.random.RandomState(random_state).choice(
+            total_samples, n_labeled, replace=False
+        )
+        
+    elif mode == 'per_class':
+        # Label only X samples per class
+        labeled_indices = []
+        for class_name in set(train_labels):
+            class_indices = [i for i, label in enumerate(train_labels) if label == class_name]
+            n_take = min(int(value), len(class_indices))
+            selected = np.random.RandomState(random_state).choice(
+                class_indices, n_take, replace=False
+            )
+            labeled_indices.extend(selected)
+        labeled_indices = np.array(labeled_indices)
+    
+    # Create masked labels: -1 for unlabeled, original for labeled
+    masked_labels = [-1] * total_samples  # All unlabeled initially
+    for idx in labeled_indices:
+        masked_labels[idx] = train_labels[idx]  # Restore original label
+    
+    # Log detailed results for verification
+    if data_logger:
+        labeled_class_counts = Counter([train_labels[i] for i in labeled_indices])
+        data_logger.log_few_shot_results(total_samples, len(labeled_indices), labeled_class_counts)
+    
+    # Additional detailed logging for verification
+    total_images = len(train_paths)
+    total_labels = len(train_labels)
+    unique_classes = len(set(train_labels))
+    labeled_samples = len(labeled_indices)
+    unlabeled_samples = total_samples - labeled_samples
+    
+    print(f"🎯 LABEL HIDING FEW-SHOT VERIFICATION:")
+    print(f"   📊 Total images: {total_images:,}")
+    print(f"   📊 Total labels: {total_labels:,}")
+    print(f"   📊 Unique classes: {unique_classes}")
+    print(f"   ✅ Labeled samples: {labeled_samples:,} ({labeled_samples/total_samples*100:.1f}%)")
+    print(f"   ❌ Unlabeled samples: {unlabeled_samples:,} ({unlabeled_samples/total_samples*100:.1f}%)")
+    print(f"   🔍 Sanity check: images={total_images} == labels={total_labels} == samples={total_samples}")
+    
+    # Show per-class labeled distribution
+    labeled_class_counts = Counter([train_labels[i] for i in labeled_indices])
+    print(f"   📈 Labeled samples per class:")
+    for class_name, count in sorted(labeled_class_counts.items()):
+        print(f"      {class_name}: {count} samples")
+    
+    return train_paths, masked_labels
+
 def split_clean_dataset_with_config(pickle_path, config_module, base_data_dir=None):
-    """Load and split dataset using config module settings (including few-shot)."""
+    """Load and split dataset using config module settings (including label hiding few-shot)."""
     few_shot_mode = getattr(config_module, 'FEW_SHOT_MODE', None)
     few_shot_value = getattr(config_module, 'FEW_SHOT_VALUE', 0.1)
     
@@ -179,44 +256,3 @@ def split_clean_dataset_with_config(pickle_path, config_module, base_data_dir=No
         few_shot_mode=few_shot_mode,
         few_shot_value=few_shot_value
     )
-
-def apply_few_shot(train_paths, train_labels, mode=None, value=0.1, random_state=42, data_logger=None):
-    """Simulate few-shot learning by using only a subset of labeled training data.
-    
-    This simulates real-world scenarios where you have limited labeled data,
-    comparing how CNN vs DINO perform with scarce labels.
-    """
-    original_count = len(train_paths)
-    
-    if mode is None:
-        if data_logger:
-            data_logger.log_few_shot_disabled(original_count)
-        return train_paths, train_labels
-    
-    if data_logger:
-        data_logger.log_few_shot_enabled(mode, value)
-    
-    if mode == 'percentage':
-        # Use percentage of total training data
-        n_samples = int(len(train_paths) * value)
-        indices = np.random.RandomState(random_state).choice(len(train_paths), n_samples, replace=False)
-    elif mode == 'per_class':
-        # Use fixed number of samples per class
-        indices = []
-        for class_name in set(train_labels):
-            class_indices = [i for i, label in enumerate(train_labels) if label == class_name]
-            n_take = min(int(value), len(class_indices))
-            selected = np.random.RandomState(random_state).choice(class_indices, n_take, replace=False)
-            indices.extend(selected)
-        indices = np.array(indices)
-    
-    # Apply selection
-    few_shot_paths = [train_paths[i] for i in indices]
-    few_shot_labels = [train_labels[i] for i in indices]
-    
-    # Log results
-    if data_logger:
-        class_counts = Counter(few_shot_labels)
-        data_logger.log_few_shot_results(original_count, len(few_shot_paths), class_counts)
-    
-    return few_shot_paths, few_shot_labels
