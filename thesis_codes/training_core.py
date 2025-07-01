@@ -47,12 +47,20 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
     # Log training start
     training_logger.log_training_start(config_dict, total_samples)
     
-    # Log few-shot data information if available
+    # Apply few-shot adjustments if enabled in config
     if hasattr(config_module, 'FEW_SHOT_MODE') and config_module.FEW_SHOT_MODE is not None:
+        # Adjust epochs for few-shot learning
+        original_epochs = config_module.EPOCHS
+        config_module.EPOCHS = min(50, config_module.EPOCHS * 2)  # Increase epochs but cap at 50
+        
+        # Adjust early stopping patience
+        config_module.EARLY_STOPPING_PATIENCE = max(10, config_module.EARLY_STOPPING_PATIENCE * 2)
+        
+        # Log few-shot configuration
         total_train_samples = len(train_loader.dataset)
         training_logger.log_few_shot_info(
-            config_module.FEW_SHOT_MODE, 
-            config_module.FEW_SHOT_VALUE, 
+            config_module.FEW_SHOT_MODE,
+            config_module.FEW_SHOT_VALUE,
             total_train_samples
         )
     

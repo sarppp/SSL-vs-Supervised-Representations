@@ -1,8 +1,8 @@
 import multiprocessing as mp
 
 # Dataset Configuration
-IMAGE_SIZE = (320, 320)
-BATCH_SIZE = 32
+IMAGE_SIZE = (384, 384)
+BATCH_SIZE = 64
 NUM_WORKERS = 0  # Keep at 0 to avoid file access issues
 MAX_WORKERS = mp.cpu_count()
 
@@ -23,11 +23,10 @@ RANDOM_STATE = 42
 # Model Configuration
 AVAILABLE_MODELS = [
     'efficientnet_b0', 
-    'efficientnet_b3', 
-    'dinov2_vits14',  # DINOv2 small
-    'dinov2_vitb14',  # DINOv2 base
+    'efficientnet_b3',
+    'efficientnet_b4', 
 ]
-MODEL_NAME = 'efficientnet_b3'  # Default model
+MODEL_NAME = 'efficientnet_b4'  # Default model
 
 # Training Configuration
 LEARNING_RATE = 0.001
@@ -139,6 +138,6 @@ VAL_TEST_TRANSFORMS = {
     }
 }
 
-# Few-Shot Learning  
-FEW_SHOT_MODE = 'percentage'  # Options: None, 'percentage', 'per_class'
+# Few-Shot Learning (interpreted by individual modules)
+FEW_SHOT_MODE = None  # Options: None, 'percentage', 'per_class'
 FEW_SHOT_VALUE = 0.1  # 0.1 = 10%, 0.01 = 1%, or samples per class
