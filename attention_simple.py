@@ -70,48 +70,157 @@ class SimpleAttentionVisualizer:
         ])
     
     def get_transformer_attention(self, image_tensor):
-        """Extract attention weights from transformer model."""
-        attentions = []
+        """Extract attention weights from transformer model (DINOv2)."""
         
-        def hook_fn(module, input, output):
-            # For DINOv2 attention modules
-            if hasattr(module, 'get_attention_map'):
-                attentions.append(module.get_attention_map())
-            # Try to capture attention from common patterns
-            elif len(output) > 1 and hasattr(output[1], 'shape'):
-                attentions.append(output[1])
+        # Calculate patch dimensions
+        B, C, H, W = image_tensor.shape
+        patch_size = getattr(self.model.backbone, 'patch_size', 14)
+        num_patches_h = H // patch_size
+        num_patches_w = W // patch_size
+        num_patches = num_patches_h * num_patches_w
         
-        # Register hooks on attention modules
-        hooks = []
-        for name, module in self.model.named_modules():
-            if 'attn' in name and 'proj' not in name:
-                hook = module.register_forward_hook(hook_fn)
-                hooks.append(hook)
+        print(f"📐 Image size: {H}x{W}, Patch size: {patch_size}")
+        print(f"📐 Grid size: {num_patches_h}x{num_patches_w} = {num_patches} patches")
         
-        # Forward pass
-        with torch.no_grad():
-            output = self.model(image_tensor)
-        
-        # Clean up hooks
-        for hook in hooks:
+        # Method 1: Try to manually compute attention from the last block
+        print("🎯 Computing attention from last transformer block")
+        try:
+            last_block = self.model.backbone.blocks[-1]
+            attention_weights = []
+            
+            def attention_hook(module, input, output):
+                if len(input) > 0:
+                    x = input[0]  # [batch, seq_len, dim]
+                    B, N, C = x.shape
+                    
+                    # Manually compute QKV and attention
+                    if hasattr(module, 'qkv') and hasattr(module, 'num_heads') and hasattr(module, 'scale'):
+                        qkv = module.qkv(x).reshape(B, N, 3, module.num_heads, C // module.num_heads).permute(2, 0, 3, 1, 4)
+                        q, k, v = qkv[0], qkv[1], qkv[2]  # Each is [B, num_heads, N, head_dim]
+                        
+                        # Compute attention scores
+                        attn = (q @ k.transpose(-2, -1)) * module.scale
+                        attn = attn.softmax(dim=-1)
+                        attention_weights.append(attn.detach())
+            
+            # Register hook on last attention module
+            hook = last_block.attn.register_forward_hook(attention_hook)
+            
+            # Forward pass
+            with torch.no_grad():
+                _ = self.model(image_tensor)
+            
             hook.remove()
-        
-        # If we got attention weights, process them
-        if attentions:
-            # Use the last attention layer
-            attention = attentions[-1]
-            if len(attention.shape) == 4:  # [batch, heads, seq, seq]
-                # Average over heads and take [CLS] attention to patches
-                attention = attention[0].mean(0)  # [seq, seq]
-                cls_attention = attention[0, 1:]  # CLS to patches
+            
+            if attention_weights:
+                attn = attention_weights[0]  # [batch, heads, seq, seq]
+                attn = attn[0]  # First batch [heads, seq, seq]
+                attn = attn.mean(0)  # Average over heads [seq, seq]
                 
-                # Reshape to spatial grid
-                num_patches = len(cls_attention)
-                grid_size = int(np.sqrt(num_patches))
-                if grid_size * grid_size == num_patches:
-                    attention_map = cls_attention.reshape(grid_size, grid_size)
+                # Extract CLS to patch attention (first token is CLS)
+                cls_attn = attn[0, 1:]  # CLS token to patches
+                
+                if len(cls_attn) == num_patches:
+                    attention_map = cls_attn.reshape(num_patches_h, num_patches_w)
+                    print(f"🎯 Successfully extracted attention map: {attention_map.shape}")
                     return attention_map.cpu().numpy()
+                else:
+                    print(f"⚠️ Patch count mismatch: got {len(cls_attn)}, expected {num_patches}")
+                    
+        except Exception as e:
+            print(f"⚠️ Manual attention computation failed: {e}")
         
+        # Method 2: Use global average pooling attention approximation
+        print("🎯 Using feature-based attention approximation")
+        try:
+            # Temporarily enable gradients for input only
+            image_tensor_grad = image_tensor.clone().detach().requires_grad_(True)
+            
+            # Forward pass
+            output = self.model(image_tensor_grad)
+            predicted_class = output.argmax(dim=1)
+            class_score = output[0, predicted_class]
+            
+            # Compute gradients w.r.t input
+            grad_outputs = torch.autograd.grad(
+                outputs=class_score,
+                inputs=image_tensor_grad,
+                create_graph=False,
+                retain_graph=False
+            )[0]
+            
+            # Compute gradient magnitude and pool to patch grid
+            grad_magnitude = torch.sqrt(torch.sum(grad_outputs[0]**2, dim=0))  # [H, W]
+            
+            # Pool to patch grid
+            attention_map = F.avg_pool2d(
+                grad_magnitude.unsqueeze(0).unsqueeze(0), 
+                kernel_size=patch_size, 
+                stride=patch_size
+            )[0, 0]  # [num_patches_h, num_patches_w]
+            
+            # Normalize
+            attention_map = attention_map.cpu().numpy()
+            if attention_map.max() > attention_map.min():
+                attention_map = (attention_map - attention_map.min()) / (attention_map.max() - attention_map.min())
+            
+            print(f"🎯 Generated gradient-based attention map: {attention_map.shape}")
+            return attention_map
+            
+        except Exception as e:
+            print(f"⚠️ Gradient-based attention failed: {e}")
+        
+        # Method 3: Simple spatial attention based on feature activation
+        print("🎯 Using activation-based attention approximation")
+        try:
+            # Get intermediate features from backbone
+            features = []
+            
+            def feature_hook(module, input, output):
+                if len(output.shape) == 3:  # [batch, seq, dim]
+                    features.append(output.detach())
+            
+            # Register hook on last block
+            if hasattr(self.model.backbone, 'blocks'):
+                hook = self.model.backbone.blocks[-1].register_forward_hook(feature_hook)
+                
+                with torch.no_grad():
+                    _ = self.model(image_tensor)
+                
+                hook.remove()
+                
+                if features:
+                    feat = features[0][0]  # [seq, dim], first batch
+                    
+                    # Remove CLS token and reshape to spatial grid
+                    if feat.shape[0] == num_patches + 1:  # +1 for CLS token
+                        patch_features = feat[1:]  # Remove CLS token
+                        
+                        # Compute attention as norm of features
+                        attention_scores = torch.norm(patch_features, dim=1)  # [num_patches]
+                        
+                        # Reshape to spatial grid
+                        attention_map = attention_scores.reshape(num_patches_h, num_patches_w)
+                        attention_map = attention_map.cpu().numpy()
+                        
+                        # Normalize
+                        if attention_map.max() > attention_map.min():
+                            attention_map = (attention_map - attention_map.min()) / (attention_map.max() - attention_map.min())
+                        
+                        print(f"🎯 Generated activation-based attention map: {attention_map.shape}")
+                        return attention_map
+                    else:
+                        print(f"⚠️ Unexpected feature sequence length: {feat.shape[0]}, expected {num_patches + 1}")
+        
+        except Exception as e:
+            print(f"⚠️ Activation-based attention failed: {e}")
+        
+        print("❌ All attention extraction methods failed")
+        return None
+    
+    def _get_gradient_attention(self, image_tensor, num_patches_h, num_patches_w):
+        """Get attention using gradient-based method (removed as it's now integrated above)."""
+        # This method is no longer needed as functionality is integrated above
         return None
     
     def get_cnn_attention(self, image_tensor, predicted_class):
