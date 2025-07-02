@@ -303,7 +303,8 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             class_names=class_names,
             class_to_idx=class_to_idx,
             use_amp=device.type == 'cuda',
-            config_module=active_config
+            config_module=active_config,
+            test_loader=test_loader  # Pass test_loader for dataset size logging
         )
         
         # Test evaluation
