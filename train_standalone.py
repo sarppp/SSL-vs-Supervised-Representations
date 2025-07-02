@@ -293,7 +293,8 @@ def main():
         class_names=train_dataset.classes,
         class_to_idx=train_dataset.class_to_idx,
         use_amp=not args.no_amp,
-        config_module=cfg
+        config_module=cfg,
+        test_loader=test_loader  # Pass test_loader for dataset size logging
     )
     
     print(f"\n🎉 Training completed!")
@@ -304,23 +305,34 @@ def main():
     
     # Test evaluation (unless skipped)
     if not args.skip_test:
+        # Create a shared evaluation logger for both tests
+        from logger_manager import EvaluationLogger
+        shared_eval_logger = EvaluationLogger(cfg.MODEL_NAME)
+        
         print(f"\n🧪 STEP 6: Evaluating on test set...")
         test_results = evaluation.comprehensive_test_evaluation(
             model, test_loader, device, train_dataset.classes,
-            model_name=cfg.MODEL_NAME, config_module=cfg, use_amp=not args.no_amp
+            model_name=cfg.MODEL_NAME, config_module=cfg, use_amp=not args.no_amp,
+            eval_logger=shared_eval_logger
         )
         print(f"🎯 Test accuracy: {test_results['test_accuracy']:.2f}%")
         
-        # Also test the saved best model
+        # Also test the saved best model (using the same logger)
         print(f"\n🔄 Testing saved best model...")
         best_model = model_setup.create_model(len(train_dataset.classes), cfg.MODEL_NAME, cfg)
         checkpoint = torch.load(results['best_model_path'])
         best_model.load_state_dict(checkpoint['model_state_dict'])
         best_model = best_model.to(device)
         
+        # Log separator for the second evaluation in the same log file
+        shared_eval_logger.get_logger().info("\n" + "="*60)
+        shared_eval_logger.get_logger().info("🔄 EVALUATING BEST SAVED MODEL")
+        shared_eval_logger.get_logger().info("="*60)
+        
         saved_test_results = evaluation.comprehensive_test_evaluation(
             best_model, test_loader, device, train_dataset.classes,
-            model_name=f"{cfg.MODEL_NAME}_best_saved", config_module=cfg, use_amp=not args.no_amp
+            model_name=f"{cfg.MODEL_NAME}_best_saved", config_module=cfg, use_amp=not args.no_amp,
+            eval_logger=shared_eval_logger
         )
         print(f"🎯 Saved best model test accuracy: {saved_test_results['test_accuracy']:.2f}%")
     

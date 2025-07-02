@@ -76,7 +76,7 @@ def detailed_classification_report(y_true, y_pred, class_names, eval_logger=None
     if eval_logger:
         eval_logger.log_per_class_accuracy(class_names, y_true, y_pred)
 
-def comprehensive_test_evaluation(model, test_loader, device, class_names, model_name=None, config_module=None, use_amp=False):
+def comprehensive_test_evaluation(model, test_loader, device, class_names, model_name=None, config_module=None, use_amp=False, eval_logger=None):
     """Complete test evaluation pipeline (without confusion matrix)."""
     # Use default config if none provided (for backward compatibility)
     if config_module is None:
@@ -85,8 +85,12 @@ def comprehensive_test_evaluation(model, test_loader, device, class_names, model
     
     model_name = model_name or config_module.MODEL_NAME
     
-    # Create evaluation logger
-    eval_logger = EvaluationLogger(model_name)
+    # Create evaluation logger only if not provided
+    if eval_logger is None:
+        eval_logger = EvaluationLogger(model_name)
+        is_shared_logger = False
+    else:
+        is_shared_logger = True
     
     # Check if this was trained with few-shot learning
     few_shot_enabled = hasattr(config_module, 'FEW_SHOT_MODE') and config_module.FEW_SHOT_MODE is not None

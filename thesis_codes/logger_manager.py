@@ -922,7 +922,7 @@ class DataSplitterLogger:
     def log_path_conversion(self, base_data_dir: str, conversion_type: str = "relative"):
         """Log path conversion operations."""
         if conversion_type == "old_to_new":
-            self.logger.info(f"🔗 Converting old absolute paths to new base: {base_data_dir}")
+            self.logger.info(f"🔗 Converting old paths to new base: {base_data_dir}")
         else:
             self.logger.info(f"🔗 Converting relative paths using base: {base_data_dir}")
     

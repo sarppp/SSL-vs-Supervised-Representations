@@ -108,28 +108,93 @@ def split_clean_dataset(pickle_path, test_size=0.15, val_size=0.15, random_state
     # Check class distribution before splitting
     original_distribution = Counter(labels)
     min_class_count = min(original_distribution.values())
+    num_classes = len(original_distribution)
     
     # Ensure minimum samples per class for stratification
     min_samples_needed = 3  # At least 1 for each split
     if min_class_count < min_samples_needed:
         data_logger.log_stratification_warning(min_class_count)
     
+    # Calculate minimum samples needed for each split to ensure no empty sets
+    min_test_samples = max(1, num_classes)  # At least 1 sample per class for test
+    min_val_samples = max(1, num_classes)   # At least 1 sample per class for val
+    min_train_samples = max(1, num_classes) # At least 1 sample per class for train
+    
+    total_samples = len(image_paths)
+    min_total_needed = min_test_samples + min_val_samples + min_train_samples
+    
+    # Check if we have enough samples
+    if total_samples < min_total_needed:
+        raise ValueError(f"Not enough samples ({total_samples}) for proper stratified split. "
+                        f"Need at least {min_total_needed} samples for {num_classes} classes.")
+    
+    # Adjust split sizes if they would result in empty sets
+    actual_test_size = max(int(total_samples * test_size), min_test_samples)
+    actual_val_size = max(int(total_samples * val_size), min_val_samples)
+    actual_train_size = total_samples - actual_test_size - actual_val_size
+    
+    if actual_train_size < min_train_samples:
+        # Readjust if train becomes too small
+        actual_train_size = min_train_samples
+        remaining = total_samples - actual_train_size
+        actual_test_size = max(remaining // 2, min_test_samples)
+        actual_val_size = remaining - actual_test_size
+        
+        if actual_val_size < min_val_samples:
+            actual_val_size = min_val_samples
+            actual_test_size = remaining - actual_val_size
+    
+    # Convert back to proportions for sklearn
+    adjusted_test_size = actual_test_size / total_samples
+    adjusted_val_size = actual_val_size / total_samples
+    
+    print(f"📊 Adjusted split sizes:")
+    print(f"   Original: test={test_size:.2%}, val={val_size:.2%}")
+    print(f"   Adjusted: test={adjusted_test_size:.2%} ({actual_test_size} samples), val={adjusted_val_size:.2%} ({actual_val_size} samples)")
+    print(f"   Train will be: {1-adjusted_test_size-adjusted_val_size:.2%} ({actual_train_size} samples)")
+    
     # STEP 1: First split - separate test set
-    train_val_paths, test_paths, train_val_labels, test_labels = train_test_split(
-        image_paths, labels,
-        test_size=test_size,
-        stratify=labels,
-        random_state=random_state
-    )
+    try:
+        train_val_paths, test_paths, train_val_labels, test_labels = train_test_split(
+            image_paths, labels,
+            test_size=adjusted_test_size,
+            stratify=labels,
+            random_state=random_state
+        )
+    except ValueError as e:
+        print(f"⚠️  Stratification failed: {e}")
+        print("   Falling back to non-stratified split...")
+        train_val_paths, test_paths, train_val_labels, test_labels = train_test_split(
+            image_paths, labels,
+            test_size=adjusted_test_size,
+            random_state=random_state
+        )
 
     # STEP 2: Second split - separate train and validation
-    val_size_from_remaining = val_size / (1 - test_size)
-    train_paths, val_paths, train_labels, val_labels = train_test_split(
-        train_val_paths, train_val_labels,
-        test_size=val_size_from_remaining,
-        stratify=train_val_labels,
-        random_state=random_state
-    )
+    val_size_from_remaining = adjusted_val_size / (1 - adjusted_test_size)
+    try:
+        train_paths, val_paths, train_labels, val_labels = train_test_split(
+            train_val_paths, train_val_labels,
+            test_size=val_size_from_remaining,
+            stratify=train_val_labels,
+            random_state=random_state
+        )
+    except ValueError as e:
+        print(f"⚠️  Stratification failed for train/val split: {e}")
+        print("   Falling back to non-stratified split...")
+        train_paths, val_paths, train_labels, val_labels = train_test_split(
+            train_val_paths, train_val_labels,
+            test_size=val_size_from_remaining,
+            random_state=random_state
+        )
+    
+    # Final validation - ensure no empty sets
+    if len(test_paths) == 0:
+        raise ValueError("❌ Test set is empty! This should not happen after adjustments.")
+    if len(val_paths) == 0:
+        raise ValueError("❌ Validation set is empty! This should not happen after adjustments.")
+    if len(train_paths) == 0:
+        raise ValueError("❌ Training set is empty! This should not happen after adjustments.")
 
     # Print detailed split statistics
     total_images = len(image_paths)

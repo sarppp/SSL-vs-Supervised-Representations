@@ -8,8 +8,25 @@ from training_epochs import train_epoch, validate_epoch, save_checkpoint, cleanu
 
 
 def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, device, 
-                model_name=None, class_names=None, class_to_idx=None, use_amp=False, config_module=None):
-    """Complete training loop with enhanced monitoring."""
+                model_name=None, class_names=None, class_to_idx=None, use_amp=False, config_module=None, test_loader=None):
+    """
+    Train the model with comprehensive logging and monitoring.
+    
+    Args:
+        model: PyTorch model to train
+        train_loader: Training data loader
+        val_loader: Validation data loader
+        criterion: Loss function
+        optimizer: Optimizer
+        scheduler: Learning rate scheduler
+        device: Device to train on
+        model_name: Name of the model for logging
+        class_names: List of class names
+        class_to_idx: Class name to index mapping
+        use_amp: Whether to use Automatic Mixed Precision
+        config_module: Configuration module
+        test_loader: Optional test data loader (for logging dataset size only)
+    """
     # Use default config if none provided (for backward compatibility)
     if config_module is None:
         import config as default_config
@@ -41,7 +58,8 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
                    if not k.startswith('__') and not callable(v)}
     total_samples = {
         'train': len(train_loader.dataset),
-        'val': len(val_loader.dataset)
+        'val': len(val_loader.dataset),
+        'test': len(test_loader.dataset) if test_loader is not None else 0
     }
     
     # Log training start
