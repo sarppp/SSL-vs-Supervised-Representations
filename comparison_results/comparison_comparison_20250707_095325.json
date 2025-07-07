@@ -1,0 +1,101 @@
+{
+  "session_id": "comparison_20250707_095325",
+  "timestamp": "20250707_095325",
+  "start_time": "2025-07-07T09:53:25.113611",
+  "end_time": "2025-07-07T09:56:35.190328",
+  "total_time": "0:03:10.076717",
+  "experiment_metadata": {
+    "dataset_info": {
+      "total_dataset_size": 25126
+    },
+    "experiment_config": {
+      "sample_size": 2512,
+      "few_shot_mode": null,
+      "few_shot_value": 0.1,
+      "models": [
+        [
+          "cnn",
+          "efficientnet_b4"
+        ],
+        [
+          "dinov2",
+          "dinov2_vits14"
+        ]
+      ]
+    },
+    "start_time": "2025-07-07T09:53:25.113611"
+  },
+  "model_results": [
+    {
+      "model_type": "cnn",
+      "model_name": "efficientnet_b4",
+      "success": true,
+      "time": 67.45770978927612,
+      "train_accuracy": 72.2980659840728,
+      "test_accuracy": 75.53191489361703,
+      "best_val_acc": 54.255319148936174,
+      "train_samples": 1758,
+      "val_samples": 376,
+      "labeled_samples": 1758,
+      "test_samples": 376,
+      "batch_size": 32,
+      "image_size": [
+        384,
+        384
+      ],
+      "epochs": 2,
+      "few_shot_mode": null,
+      "few_shot_value": 0.1
+    },
+    {
+      "model_type": "dinov2",
+      "model_name": "dinov2_vits14",
+      "success": true,
+      "time": 121.98930954933167,
+      "train_accuracy": 73.72013651877133,
+      "test_accuracy": 78.45744680851064,
+      "best_val_acc": 71.01063829787235,
+      "train_samples": 1758,
+      "val_samples": 376,
+      "labeled_samples": 1758,
+      "test_samples": 376,
+      "batch_size": 32,
+      "image_size": [
+        378,
+        378
+      ],
+      "epochs": 2,
+      "few_shot_mode": null,
+      "few_shot_value": 0.1
+    }
+  ],
+  "summary": {
+    "total_models": 2,
+    "successful_models": 2,
+    "failed_models": 0,
+    "winner": {
+      "model_type": "dinov2",
+      "model_name": "dinov2_vits14",
+      "success": true,
+      "time": 121.98930954933167,
+      "train_accuracy": 73.72013651877133,
+      "test_accuracy": 78.45744680851064,
+      "best_val_acc": 71.01063829787235,
+      "train_samples": 1758,
+      "val_samples": 376,
+      "labeled_samples": 1758,
+      "test_samples": 376,
+      "batch_size": 32,
+      "image_size": [
+        378,
+        378
+      ],
+      "epochs": 2,
+      "few_shot_mode": null,
+      "few_shot_value": 0.1
+    }
+  },
+  "files": {
+    "log_file": "logs/comparison_comparison_20250707_095325.log"
+  }
+}

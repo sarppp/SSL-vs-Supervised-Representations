@@ -7,34 +7,38 @@ import torch
 import sys
 import os
 import time
-from torch.utils.data import Subset
 import numpy as np
+import random
 
-# Add project paths
-current_dir = os.path.dirname(os.path.abspath(__file__))
-thesis_codes_dir = os.path.join(current_dir, 'thesis_codes')
+# Add src directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-if current_dir not in sys.path:
-    sys.path.append(current_dir)
-if thesis_codes_dir not in sys.path:
-    sys.path.append(thesis_codes_dir)
+# Import the src package to set up all paths
+import src
 
 try:
-    # Import modules
-    import data_splitter # type: ignore
-    import dataloader_setup # type: ignore
-    import config # type: ignore
-    import config_dinov2 # type: ignore
-    import model_setup # type: ignore
-    import training # type: ignore
-    import evaluation # type: ignore
-    from logger_manager import ComparisonLogger # type: ignore
+    # Import modules from new structure
+    from src.config import config_paths
+    from src.data import data_splitter
+    from src.data import dataloader_setup
+    from src.config import config
+    from src.config import config_dinov2
+    from src.models import model_setup
+    from src.training import training
+    from src.evaluation import evaluation
+    from src.utils.logger_manager import ComparisonLogger
     print("✅ All modules imported successfully")
 except ImportError as e:
     print(f"❌ Import error: {e}")
-    print(f"Current directory: {current_dir}")
     print(f"Python path: {sys.path}")
     sys.exit(1)
+
+SEED = 42
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(SEED)
 
 # GPU setup
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -168,8 +172,8 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
     try:
         # Load data (use existing clean dataset) - NO few-shot here, we'll apply label hiding later
         train_paths, train_labels, val_paths, val_labels, test_paths, test_labels = data_splitter.split_clean_dataset(
-            pickle_path='clean_dataset.pkl',
-            base_data_dir='crop_pest_data',
+            pickle_path=config_paths.CLEAN_DATASET_PICKLE,
+            base_data_dir=config_paths.BASE_DATA_DIR,
             few_shot_mode=None  # Don't reduce dataset size
         )
         
@@ -321,9 +325,9 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         end_time = time.time()
         
         # Calculate actual dataset sizes
-        train_size_actual = len(train_loader.dataset)
-        val_size_actual = len(val_loader.dataset)
-        test_size_actual = len(test_loader.dataset)
+        train_size_actual = len(train_loader.dataset)  # type: ignore
+        val_size_actual = len(val_loader.dataset)  # type: ignore
+        test_size_actual = len(test_loader.dataset)  # type: ignore
         
         return {
             'model_type': model_type,
@@ -357,8 +361,8 @@ def main():
     
     # 📊 AUTO-DETECT DATASET SIZE
     temp_train, temp_labels, temp_val, temp_val_labels, temp_test, temp_test_labels = data_splitter.split_clean_dataset(
-        pickle_path='clean_dataset.pkl',
-        base_data_dir='this_studio/crop_pest_data',
+        pickle_path=config_paths.CLEAN_DATASET_PICKLE,
+        base_data_dir=config_paths.BASE_DATA_DIR,
         few_shot_mode=None  # Just for size detection, actual few-shot applied later
     )
     total_dataset_size = len(temp_train) + len(temp_val) + len(temp_test)

@@ -29,25 +29,28 @@ import argparse
 import torch
 from pathlib import Path
 
-# Auto-find directory containing the modules
-for root, dirs, files in os.walk('.'):
-    if 'config.py' in files and 'training.py' in files:
-        sys.path.insert(0, root)
-        break
+# Add src directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-# Import all required modules (suppress linter warnings for dynamic imports)
+# Import the src package to set up all paths
+import src
+
+# Import config_paths from the new location
+from src.config import config_paths
+
+# Import all required modules
 try:
-    import data_splitter  # type: ignore
-    import dataloader_setup  # type: ignore
-    import class_weights  # type: ignore
-    import model_setup  # type: ignore
-    import training  # type: ignore
-    import evaluation  # type: ignore
-    import config  # type: ignore
-    import config_dinov2  # type: ignore
+    from src.data import data_splitter
+    from src.data import dataloader_setup
+    from src.utils import class_weights
+    from src.models import model_setup
+    from src.training import training
+    from src.evaluation import evaluation
+    from src.config import config
+    from src.config import config_dinov2
 except ImportError as e:
     print(f"❌ Could not import required modules: {e}")
-    print("Make sure you're running from a directory containing the training modules.")
+    print("Make sure the src directory structure is correct.")
     sys.exit(1)
 
 
@@ -64,8 +67,8 @@ def setup_environment():
     
     # Check required files
     required_files = [
-        'clean_dataset.pkl',
-        'crop_pest_data'
+        config_paths.CLEAN_DATASET_PICKLE,
+        config_paths.BASE_DATA_DIR
     ]
     
     missing_files = []
@@ -76,8 +79,8 @@ def setup_environment():
     if missing_files:
         print(f"❌ Missing required files: {missing_files}")
         print("   Please ensure you have:")
-        print("   - clean_dataset.pkl (cleaned dataset)")
-        print("   - crop_pest_data/ (image directory)")
+        print(f"   - {config_paths.CLEAN_DATASET_PICKLE} (cleaned dataset)")
+        print(f"   - {config_paths.BASE_DATA_DIR}/ (image directory)")
         sys.exit(1)
     
     print("✅ Environment check passed!")
@@ -217,8 +220,8 @@ def main():
         # Still need data for testing (no few-shot for test-only mode)
         print("\n📂 STEP 1: Loading and splitting dataset...")
         train_paths, train_labels, val_paths, val_labels, test_paths, test_labels = data_splitter.split_clean_dataset(
-            pickle_path='clean_dataset.pkl',
-            base_data_dir='crop_pest_data',
+            pickle_path=config_paths.CLEAN_DATASET_PICKLE,
+            base_data_dir=config_paths.BASE_DATA_DIR,
             few_shot_mode=None  # Disable few-shot for test-only mode
         )
         
@@ -252,9 +255,9 @@ def main():
     print("\n📂 STEP 1: Loading and splitting dataset...")
     # Use the new integrated label hiding approach
     train_paths, train_labels, val_paths, val_labels, test_paths, test_labels = data_splitter.split_clean_dataset_with_config(
-        pickle_path='clean_dataset.pkl',
+        pickle_path=config_paths.CLEAN_DATASET_PICKLE,
         config_module=cfg,
-        base_data_dir='crop_pest_data'
+        base_data_dir=config_paths.BASE_DATA_DIR
     )
     
     print("\n🔧 STEP 2: Creating dataloaders...")
@@ -306,8 +309,12 @@ def main():
     # Test evaluation (unless skipped)
     if not args.skip_test:
         # Create a shared evaluation logger for both tests
-        from logger_manager import EvaluationLogger
-        shared_eval_logger = EvaluationLogger(cfg.MODEL_NAME)
+        try:
+            from src.utils.logger_manager import EvaluationLogger
+            shared_eval_logger = EvaluationLogger(cfg.MODEL_NAME)
+        except ImportError:
+            print("⚠️  Warning: logger_manager not found, proceeding without shared logger")
+            shared_eval_logger = None
         
         print(f"\n🧪 STEP 6: Evaluating on test set...")
         test_results = evaluation.comprehensive_test_evaluation(
@@ -325,9 +332,10 @@ def main():
         best_model = best_model.to(device)
         
         # Log separator for the second evaluation in the same log file
-        shared_eval_logger.get_logger().info("\n" + "="*60)
-        shared_eval_logger.get_logger().info("🔄 EVALUATING BEST SAVED MODEL")
-        shared_eval_logger.get_logger().info("="*60)
+        if shared_eval_logger is not None:
+            shared_eval_logger.logger.info("\n" + "="*60)
+            shared_eval_logger.logger.info("🔄 EVALUATING BEST SAVED MODEL")
+            shared_eval_logger.logger.info("="*60)
         
         saved_test_results = evaluation.comprehensive_test_evaluation(
             best_model, test_loader, device, train_dataset.classes,

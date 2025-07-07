@@ -26,3 +26,21 @@ checkpoints/
 # Temporary files
 *.tmp
 *.swp
+
+# Ignore data, models, outputs, and other large files
+models/
+crop_pest_data/
+evaluation_results/
+training_results/
+*.pkl
+*.pth
+*.h5
+*.npz
+*.csv
+*.log
+attention_visualizations/
+visualizations/
+.vscode/
+.idea/
+__pycache__/
+.DS_Store
