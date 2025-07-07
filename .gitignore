@@ -44,3 +44,17 @@ visualizations/
 .idea/
 __pycache__/
 .DS_Store
+outputs/
+
+# Local tooling / IDE servers and caches
+.lightning_studio/
+.triton/
+.vscode-server*
+.cursor-server*
+.windsurf-server*
+
+# Shell history (should never be committed)
+.bash_history
+
+# Experiment outputs / intermediate results
+comparison_results/
