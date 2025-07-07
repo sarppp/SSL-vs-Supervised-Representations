@@ -16,14 +16,6 @@ import json
 from torchvision import transforms
 import torch.nn.functional as F
 
-# Add project paths
-current_dir = os.path.dirname(os.path.abspath(__file__))
-thesis_codes_dir = os.path.join(current_dir, 'thesis_codes')
-
-if current_dir not in sys.path:
-    sys.path.append(current_dir)
-if thesis_codes_dir not in sys.path:
-    sys.path.append(thesis_codes_dir)
 
 # Import config_paths for centralized path management
 from ..config import config_paths
@@ -286,8 +278,8 @@ def main():
     print("=" * 50)
     
     # Model paths (update these to match your actual model files)
-    cnn_model_path = 'models/best_cnn_b4_acc54.26_20250707_095333.pth'
-    dinov2_model_path = 'models/best_dino_vits14_acc71.01_20250707_095442.pth'
+    cnn_model_path = 'models/best_cnn_b4_label_100_acc75.80.pth'
+    dinov2_model_path = 'models/best_dino_vits14_label_100_acc71.81.pth'
     
     # Check if models exist
     if not os.path.exists(cnn_model_path):

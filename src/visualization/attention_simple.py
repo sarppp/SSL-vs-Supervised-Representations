@@ -19,10 +19,11 @@ from src.models.model_setup import create_model
 
 import torch
 
-ckpt_path = "models/best_dino_vits14_acc71.01_20250707_095442.pth"
-ckpt = torch.load(ckpt_path, map_location='cpu')
-ckpt['model_name'] = 'dinov2_vits14'  # Set to the correct model name
-torch.save(ckpt, ckpt_path)
+# Centralized paths
+from src.config.config_paths import ATTENTION_VISUALIZATIONS_DIR, ensure_directories, PROJECT_ROOT
+
+# Ensure directories exist
+ensure_directories()
 
 class SimpleAttentionVisualizer:
     """Simple attention visualization using attention rollout for transformers."""
@@ -63,7 +64,8 @@ class SimpleAttentionVisualizer:
             from src.config import config_dinov2
             config_module = config_dinov2
         elif model_name.startswith('efficientnet'):
-            from src.config import config_cnn # type: ignore
+            # CNN configuration is stored in src.config.config, alias as config_cnn for consistency
+            from src.config import config as config_cnn  # type: ignore
             config_module = config_cnn
         else:
             config_module = self.config_module
@@ -424,8 +426,8 @@ def get_random_images(base_dir='crop_pest_data', n_images=3):
 def main():
     """Test both models with simple attention."""
     models = [
-        ('models/best_cnn_b4_acc54.26_20250707_095333.pth', None),
-        ('models/best_dino_vits14_acc71.01_20250707_095442.pth', None)
+        ('models/best_cnn_b4_label_100_acc75.80.pth', None),
+        ('models/best_dino_vits14_label_100_acc71.81', None)
     ]
     
     # Get test images
@@ -437,9 +439,36 @@ def main():
     print(f"🖼️ Using images: {[Path(p).name for p in image_paths]}")
     
     for model_path, config_module in models:
-        if not Path(model_path).exists():
-            print(f"⚠️ Model not found: {model_path}")
-            continue
+        candidate_path = Path(model_path)
+        candidate_path_with_ext = None  # Safeguard initialization
+        if not candidate_path.exists():
+            # Try adding .pth extension if omitted
+            if candidate_path.suffix == "":
+                candidate_path_with_ext = candidate_path.with_suffix(".pth")
+                if candidate_path_with_ext.exists():
+                    candidate_path = candidate_path_with_ext
+            # Try resolving relative to project root
+            if not candidate_path.exists():
+                alternative = Path(PROJECT_ROOT) / candidate_path
+                if alternative.exists():
+                    candidate_path = alternative
+                elif candidate_path_with_ext is not None and (Path(PROJECT_ROOT) / candidate_path_with_ext).exists():
+                    candidate_path = Path(PROJECT_ROOT) / candidate_path_with_ext
+                else:
+                    # Fuzzy search in models directory
+                    models_dir = Path(PROJECT_ROOT) / 'models'
+                    if models_dir.exists():
+                        # Base token to search (strip extension and directory)
+                        token = candidate_path.stem.lower()
+                        matches = [p for p in models_dir.glob('*.pth') if token in p.name.lower()]
+                        if matches:
+                            candidate_path = matches[0]
+                            print(f"🔍 Using closest match: {candidate_path.name}")
+                        else:
+                            print(f"⚠️ Model not found: {model_path}")
+                            continue
+
+        model_path = str(candidate_path)
         
         print(f"\n{'='*60}")
         print(f"Testing {Path(model_path).name}")
@@ -450,8 +479,9 @@ def main():
             
             # Create save path
             model_name = visualizer.model_info['model_name']
-            save_path = f"attention_visualizations/simple_{model_name}_attention.png"
-            Path("attention_visualizations").mkdir(exist_ok=True)
+            save_dir = Path(ATTENTION_VISUALIZATIONS_DIR)
+            save_dir.mkdir(exist_ok=True, parents=True)
+            save_path = str(save_dir / f"simple_{model_name}_attention.png")
             
             # Visualize
             visualizer.visualize_images(image_paths, save_path)

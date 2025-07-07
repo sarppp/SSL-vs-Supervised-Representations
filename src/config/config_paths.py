@@ -13,8 +13,16 @@ CHECKPOINTS_DIR = os.path.join(PROJECT_ROOT, "checkpoints")
 
 # Output paths (using new organized structure)
 OUTPUTS_DIR = os.path.join(PROJECT_ROOT, "outputs")
-LOGS_DIR = os.path.join(PROJECT_ROOT, "logs")
-VISUALIZATIONS_DIR = os.path.join(PROJECT_ROOT, "visualizations")
+LOGS_DIR = os.path.join(OUTPUTS_DIR, "logs")
+VISUALIZATIONS_DIR = os.path.join(OUTPUTS_DIR, "visualizations")
+
+# Additional output sub-folders
+TRAINING_RESULTS_DIR = os.path.join(OUTPUTS_DIR, "training_results")
+EVALUATION_RESULTS_DIR = os.path.join(OUTPUTS_DIR, "evaluation_results")
+COMPARISON_RESULTS_DIR = os.path.join(OUTPUTS_DIR, "comparison_results")
+
+# Visualization sub-folder for attention heatmaps
+ATTENTION_VISUALIZATIONS_DIR = os.path.join(OUTPUTS_DIR, "attention_visualizations")
 
 # Source directories
 SRC_DIR = os.path.join(PROJECT_ROOT, "src")
@@ -36,7 +44,11 @@ def ensure_directories():
         CHECKPOINTS_DIR,
         OUTPUTS_DIR,
         LOGS_DIR,
-        VISUALIZATIONS_DIR
+        VISUALIZATIONS_DIR,
+        TRAINING_RESULTS_DIR,
+        EVALUATION_RESULTS_DIR,
+        COMPARISON_RESULTS_DIR,
+        ATTENTION_VISUALIZATIONS_DIR
     ]
     
     for directory in dirs_to_create:

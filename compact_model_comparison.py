@@ -13,9 +13,6 @@ import random
 # Add src directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-# Import the src package to set up all paths
-import src
-
 try:
     # Import modules from new structure
     from src.config import config_paths
@@ -252,6 +249,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         
         # 🎯 TRUE FEW-SHOT: Hide labels instead of reducing dataset size
         labeled_samples_count = len(train_paths)
+        few_shot_info = None  # Default when few-shot disabled
         
         print(f"🔧 Few-shot check: mode={few_shot_mode}, value={few_shot_value}")
         if few_shot_mode is not None:
@@ -270,6 +268,13 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             }
         else:
             print(f"🎯 COMPACT SCRIPT: Few-shot DISABLED - All {len(train_paths)} samples have labels")
+            # We still capture basic info for consistency
+            few_shot_info = {
+                'mode': None,
+                'value': None,
+                'labeled_count': labeled_samples_count,
+                'total_count': len(train_paths)
+            }
         
         # Create dataloaders (now with limited dataset - much faster validation!)
         train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset = dataloader_setup.create_dataloaders(
@@ -381,8 +386,8 @@ def main():
     # SAMPLE_SIZE = 500                             # Use exactly 500 samples
     
     # 🎯 TRUE FEW-SHOT LEARNING Configuration (LABEL HIDING - not dataset reduction):
-    #FEW_SHOT_MODE = None                            # Disable few-shot learning
-    FEW_SHOT_MODE = 'percentage'                  # Hide labels: only X% of data has labels
+    FEW_SHOT_MODE = None                            # Disable few-shot learning
+    #FEW_SHOT_MODE = 'percentage'                  # Hide labels: only X% of data has labels
     # FEW_SHOT_MODE = 'per_class'                   # Hide labels: only X samples per class have labels
     FEW_SHOT_VALUE = 0.01                           # 10% labeled data OR 5 samples per class
     

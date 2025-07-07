@@ -6,6 +6,19 @@ from pathlib import Path
 import json
 import numpy as np
 
+# Use centralized path constants to avoid duplication
+from src.config.config_paths import (
+    LOGS_DIR,
+    TRAINING_RESULTS_DIR,
+    EVALUATION_RESULTS_DIR,
+    COMPARISON_RESULTS_DIR,
+    OUTPUTS_DIR,
+    ensure_directories,
+)
+
+# Ensure all required directories exist at import time
+ensure_directories()
+
 class TrainingLogger:
     """Centralized logging for training sessions with structured output."""
     
@@ -13,11 +26,11 @@ class TrainingLogger:
         self.model_name = model_name
         self.session_id = f"{model_name}"
         
-        # Setup directories
-        self.log_dir = Path("logs")
-        self.results_dir = Path("training_results")
-        self.log_dir.mkdir(exist_ok=True)
-        self.results_dir.mkdir(exist_ok=True)
+        # Setup directories using shared config paths for consistency
+        self.log_dir = Path(LOGS_DIR)
+        self.results_dir = Path(TRAINING_RESULTS_DIR)
+        self.log_dir.mkdir(exist_ok=True, parents=True)
+        self.results_dir.mkdir(exist_ok=True, parents=True)
         
         # Define log filename before setting up logger
         self.log_filename = self.log_dir / f"training_{self.session_id}.log"
@@ -382,11 +395,11 @@ class EvaluationLogger:
         self.model_name = model_name
         self.session_id = f"{model_name}"
         
-        # Setup directories
-        self.log_dir = Path("logs")
-        self.results_dir = Path("evaluation_results")
-        self.log_dir.mkdir(exist_ok=True)
-        self.results_dir.mkdir(exist_ok=True)
+        # Setup directories using shared config paths for consistency
+        self.log_dir = Path(LOGS_DIR)
+        self.results_dir = Path(EVALUATION_RESULTS_DIR)
+        self.log_dir.mkdir(exist_ok=True, parents=True)
+        self.results_dir.mkdir(exist_ok=True, parents=True)
         
         # Define log filename before setting up logger
         self.log_filename = self.log_dir / f"evaluation_{self.session_id}.log"
@@ -547,9 +560,9 @@ class ModelSetupLogger:
         self.model_name = model_name
         self.session_id = f"{model_name}"
         
-        # Setup directories
-        self.log_dir = Path("logs")
-        self.log_dir.mkdir(exist_ok=True)
+        # Setup directories using shared config paths for consistency
+        self.log_dir = Path(LOGS_DIR)
+        self.log_dir.mkdir(exist_ok=True, parents=True)
         
         # Define log filename before setting up logger
         self.log_filename = self.log_dir / f"model_setup_{self.session_id}.log"
@@ -667,11 +680,11 @@ class ComparisonLogger:
     def __init__(self, timestamp: Optional[str] = None):
         self.session_id = "comparison"
         
-        # Setup directories
-        self.log_dir = Path("logs")
-        self.results_dir = Path("comparison_results")
-        self.log_dir.mkdir(exist_ok=True)
-        self.results_dir.mkdir(exist_ok=True)
+        # Setup directories using shared config paths for consistency
+        self.log_dir = Path(LOGS_DIR)
+        self.results_dir = Path(COMPARISON_RESULTS_DIR)
+        self.log_dir.mkdir(exist_ok=True, parents=True)
+        self.results_dir.mkdir(exist_ok=True, parents=True)
         
         # Define log filename before setting up logger
         self.log_filename = self.log_dir / f"{self.session_id}.log"
@@ -908,9 +921,9 @@ class DataSplitterLogger:
         self.dataset_name = dataset_name
         self.session_id = f"{dataset_name}"
         
-        # Setup directories
-        self.log_dir = Path("logs")
-        self.log_dir.mkdir(exist_ok=True)
+        # Setup directories using shared config paths for consistency
+        self.log_dir = Path(LOGS_DIR)
+        self.log_dir.mkdir(exist_ok=True, parents=True)
         
         # Define log filename before setting up logger
         self.log_filename = self.log_dir / f"data_splitter_{self.session_id}.log"
