@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
 🥊 Compact Model Comparison - CNN vs DINOv2
-Super simple 2-model comparison in <100 lines
+Self-contained script for quickly benchmarking two vision backbones.
+
+(NOTE: the original "100 lines" claim is outdated.)
 """
 import torch
 import sys
@@ -34,8 +36,7 @@ SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
-if torch.cuda.is_available():
-    torch.cuda.manual_seed_all(SEED)
+torch.cuda.manual_seed(SEED)  # torch.cuda.manual_seed_all is deprecated
 
 # GPU setup
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -79,13 +80,15 @@ def apply_label_hiding_few_shot(train_paths, train_labels, mode='percentage', va
             labeled_indices.extend(selected)
         labeled_indices = np.array(labeled_indices)
     
-    # Create masked labels: -1 for unlabeled, original for labeled
-    masked_labels = [-1] * total_samples  # All unlabeled initially
-    for idx in labeled_indices:
-        masked_labels[idx] = train_labels[idx]  # Restore original label
-    
-    # Create boolean mask for easy filtering
-    labeled_mask = [i in labeled_indices for i in range(total_samples)]
+    # ------------------------------------------------------------------
+    # Efficient O(N) mask creation
+    # ------------------------------------------------------------------
+    mask = np.zeros(total_samples, dtype=bool)
+    mask[labeled_indices] = True
+
+    # Build masked labels in a vectorised manner
+    masked_labels = [lbl if m else -1 for lbl, m in zip(train_labels, mask)]
+    labeled_mask = mask.tolist()
     
     return train_paths, masked_labels, labeled_mask
 
@@ -98,8 +101,9 @@ def create_few_shot_loss_function(criterion, ignore_index=-1):
         valid_mask = targets != ignore_index
         
         if valid_mask.sum() == 0:
-            # No labeled samples in this batch
-            return torch.tensor(0.0, requires_grad=True, device=outputs.device)
+            # No labeled samples in this batch – preserve graph so autograd
+            # still keeps references, but gradients will be zero.
+            return outputs.sum() * 0.0
         
         # Compute loss only on labeled samples
         valid_outputs = outputs[valid_mask]
@@ -207,10 +211,14 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
                     val_size = max(val_size - val_reduction, 1)
                     test_size = max(test_size - test_reduction, 1)
             
-            # Final safety check - ensure test_size is never 0
+            # Final safety check – ensure neither val_size nor test_size is 0
             if test_size == 0:
                 test_size = min(10, sample_size // 10)  # At least 10 or 10% of sample
                 train_size = sample_size - val_size - test_size
+            
+            if val_size == 0:
+                val_size = 1
+                train_size = max(train_size - 1, min_classes)
             
             # Log dataset processing
             if comparison_logger:
@@ -340,7 +348,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         val_size_actual = len(val_loader.dataset)  # type: ignore
         test_size_actual = len(test_loader.dataset)  # type: ignore
         
-        return {
+        result = {
             'model_type': model_type,
             'model_name': model_name,
             'success': True,
@@ -359,6 +367,11 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             'few_shot_value': few_shot_value,
             'few_shot_info': few_shot_info,
         }
+        
+        if comparison_logger:
+            comparison_logger.log_model_complete(model_type, model_name, result)
+
+        return result
         
     except Exception as e:
         error_result = {'model_type': model_type, 'success': False, 'error': str(e), 'time': time.time() - start_time}
@@ -427,9 +440,6 @@ def main():
     for model_type, actual_name in model_types:
         result = run_model(model_type, SAMPLE_SIZE, FEW_SHOT_MODE, FEW_SHOT_VALUE, comparison_logger)
         results.append(result)
-        
-        # Log model completion
-        comparison_logger.log_model_complete(model_type, actual_name, result)
         
         # Clear GPU cache
         if device.type == 'cuda':
