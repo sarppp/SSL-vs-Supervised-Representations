@@ -58,3 +58,16 @@ outputs/
 
 # Experiment outputs / intermediate results
 comparison_results/
+
+# Environment / user-specific caches
+.conda/
+.cache/
+.ipython/
+.local/
+.nv/
+.config/
+.docker/
+
+# Explicitly ignore any accidental root-level Docker artefacts
+/Dockerfile
+/docker-compose.yml

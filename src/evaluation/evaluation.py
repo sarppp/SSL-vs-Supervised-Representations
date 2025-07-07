@@ -133,7 +133,6 @@ def comprehensive_test_evaluation(model, test_loader, device, class_names, model
     evaluation_results = {
         'session_id': eval_logger.session_id,
         'model_name': model_name,
-        'timestamp': datetime.now().isoformat(),
         'test_accuracy': float(test_accuracy),
         'total_test_samples': int(len(y_true)),
         'num_classes': len(class_names),

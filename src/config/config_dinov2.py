@@ -167,7 +167,7 @@ VAL_TEST_TRANSFORMS = {
 USE_GRADIENT_CHECKPOINTING = True  # Save memory for larger models
 MIXED_PRECISION = True
 
-COMPILE_MODEL = True  # Set to True for PyTorch 2.0+ speedup 
+COMPILE_MODEL = False  # Set to True for PyTorch 2.0+ speedup 
 COMPILE_MODE = 'default'  # Options: 'default', 'reduce-overhead', 'max-autotune'
 
 # Few-Shot Learning

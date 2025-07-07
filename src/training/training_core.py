@@ -196,7 +196,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
             save_dir = getattr(config_module, 'SAVE_DIR', 'models')
             best_model_path = os.path.join(
                 save_dir, 
-                f'best_{model_id}_acc{val_acc:.2f}_{timestamp}.pth'
+                f'best_{model_id}_acc{val_acc:.2f}.pth'
             )
             save_checkpoint(model, optimizer, epoch, train_loss, val_loss, val_acc, 
                           best_model_path, class_names, class_to_idx, config_module, training_logger)
@@ -223,7 +223,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
             save_dir = getattr(config_module, 'SAVE_DIR', 'models')
             checkpoint_path = os.path.join(
                 save_dir, 
-                f'checkpoint_ep{epoch+1}_{model_id}_{img_size_str}px_{timestamp}.pth'
+                f'checkpoint_ep{epoch+1}_{model_id}_{img_size_str}px.pth'
             )
             save_checkpoint(model, optimizer, epoch, train_loss, val_loss, val_acc, 
                           checkpoint_path, class_names, class_to_idx, config_module, training_logger)
@@ -239,7 +239,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
     save_dir = getattr(config_module, 'SAVE_DIR', 'models')
     final_model_path = os.path.join(
         save_dir, 
-        f'final_{model_id}_acc{best_val_acc:.2f}_{timestamp}.pth'
+        f'final_{model_id}_acc{best_val_acc:.2f}.pth'
     )
     save_checkpoint(model, optimizer, len(train_losses)-1, train_losses[-1], val_losses[-1], 
                   best_val_acc, final_model_path, class_names, class_to_idx, config_module, training_logger)
@@ -248,8 +248,8 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
     training_end_time = datetime.datetime.now()
     total_training_time = training_end_time - training_start_time
     
-    # Cleanup checkpoint files
-    cleanup_checkpoint_files(timestamp, model_name, keep_best=True, keep_final=False, config_module=config_module, training_logger=training_logger)
+    # Cleanup checkpoint files (pass timestamp as None since it's removed from filenames)
+    cleanup_checkpoint_files(timestamp=None, model_name=model_name, keep_best=True, keep_final=False, config_module=config_module, training_logger=training_logger)
     
     # Save training results using TrainingLogger
     results_filename = training_logger.save_training_results(

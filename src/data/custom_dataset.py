@@ -8,25 +8,51 @@ import threading
 from io import BytesIO
 
 class CustomCropDataset(Dataset):
-    def __init__(self, image_paths, labels, transform=None, fallback_size=(224, 224), validate_images=True):
+    def __init__(self, image_paths, labels, transform=None, fallback_size=(224, 224), validate_images=True,
+                 class_to_idx: dict | None = None, ignore_index: int = -1):
+        """A custom dataset that supports *few-shot label hiding* by allowing an ``ignore_index`` (default ``-1``)
+        to denote *unlabelled* samples **without** treating that value as its own class.  
+
+        When a common ``class_to_idx`` mapping is provided, it is used **as-is** so that *all* splits
+        (train/val/test) share the exact same label → index mapping.  If not provided, the mapping is
+        built from the labels list **excluding** the ``ignore_index`` value.
+        """
+
         self.image_paths = image_paths
         self.labels = labels
         self.transform = transform
         self.fallback_size = fallback_size
         self.validate_images = validate_images
-        
-        # Thread lock for file operations
+        self.ignore_index = ignore_index
+
+        # Thread lock for file operations (prevents PIL IO race conditions on multi-worker dataloaders)
         self._file_lock = threading.Lock()
-        
-        # Cache for validated images
+
+        # Cache for validated images so we don't repeatedly hit the disk
         self._validated_cache = {}
 
-        # Create a mapping from class names to integer labels
-        # Convert all labels to strings to handle mixed int/string labels
-        string_labels = [str(label) for label in labels]
-        self.classes = sorted(list(set(string_labels)))
-        self.class_to_idx = {cls_name: i for i, cls_name in enumerate(self.classes)}
-        self.targets = [self.class_to_idx[str(label)] for label in labels]
+        # ------------------------------------------------------------------
+        # Build / assign the class mapping *once* so that every dataset split
+        # is guaranteed to use the same indices, and the special ``ignore_index``
+        # **never** becomes a legitimate class.
+        # ------------------------------------------------------------------
+        if class_to_idx is None:
+            # Derive mapping from the observed labels, skipping the ignore_index
+            unique_labels = sorted(list({lbl for lbl in labels if lbl != ignore_index}))
+            self.classes = unique_labels
+            self.class_to_idx = {lbl: i for i, lbl in enumerate(unique_labels)}
+        else:
+            # Re-use supplied mapping (order matters!)
+            self.class_to_idx = class_to_idx
+            # Preserve a reproducible ordered list of class names/ids for external use
+            # (e.g. for "dataset.classes" export)
+            # Sort by the mapped index to keep deterministic ordering
+            self.classes = [label for label, _ in sorted(class_to_idx.items(), key=lambda x: x[1])]
+
+        # Finally, convert raw labels to integer targets **but** keep ``ignore_index``
+        # untouched so that loss functions such as ``nn.CrossEntropyLoss`` with
+        # ``ignore_index`` can properly skip them.
+        self.targets = [ignore_index if lbl == ignore_index else self.class_to_idx[lbl] for lbl in labels]
         
         # 🔍 Pre-validate images during initialization to catch corruption early
         if self.validate_images:

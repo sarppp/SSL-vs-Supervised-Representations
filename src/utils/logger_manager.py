@@ -11,8 +11,7 @@ class TrainingLogger:
     
     def __init__(self, model_name: str, timestamp: Optional[str] = None):
         self.model_name = model_name
-        self.timestamp = timestamp or datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.session_id = f"{model_name}_{self.timestamp}"
+        self.session_id = f"{model_name}"
         
         # Setup directories
         self.log_dir = Path("logs")
@@ -20,9 +19,9 @@ class TrainingLogger:
         self.log_dir.mkdir(exist_ok=True)
         self.results_dir.mkdir(exist_ok=True)
         
-        # Setup loggers
-        self.logger = self._setup_logger()
+        # Define log filename before setting up logger
         self.log_filename = self.log_dir / f"training_{self.session_id}.log"
+        self.logger = self._setup_logger()
         
         # Metrics tracking
         self.metrics_history = {
@@ -42,13 +41,14 @@ class TrainingLogger:
         """Setup logger with file and console handlers."""
         logger = logging.getLogger(f"training_{self.session_id}")
         logger.setLevel(logging.INFO)
+        logger.propagate = False
         
         # Clear existing handlers
         for handler in logger.handlers[:]:
             logger.removeHandler(handler)
         
         # File handler
-        log_file = self.log_dir / f"training_{self.session_id}.log"
+        log_file = self.log_filename
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.INFO)
         
@@ -290,7 +290,6 @@ class TrainingLogger:
         results = {
             'session_id': self.session_id,
             'model_name': self.model_name,
-            'timestamp': self.timestamp,
             'start_time': self.session_start.isoformat(),
             'end_time': session_end.isoformat(),
             'training_time': training_time,
@@ -377,12 +376,11 @@ class TrainingLogger:
 
 
 class EvaluationLogger:
-    """Simple logging for evaluation sessions."""
+    """Centralized logger for model evaluation."""
     
     def __init__(self, model_name: str, timestamp: Optional[str] = None):
         self.model_name = model_name
-        self.timestamp = timestamp or datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.session_id = f"{model_name}_{self.timestamp}"
+        self.session_id = f"{model_name}"
         
         # Setup directories
         self.log_dir = Path("logs")
@@ -390,23 +388,28 @@ class EvaluationLogger:
         self.log_dir.mkdir(exist_ok=True)
         self.results_dir.mkdir(exist_ok=True)
         
-        # Setup logger
-        self.logger = self._setup_logger()
+        # Define log filename before setting up logger
         self.log_filename = self.log_dir / f"evaluation_{self.session_id}.log"
+        self.logger = self._setup_logger()
     
     def _setup_logger(self) -> logging.Logger:
-        """Setup logger with file and console handlers."""
+        """Setup logger for evaluation."""
         logger = logging.getLogger(f"evaluation_{self.session_id}")
         logger.setLevel(logging.INFO)
+        logger.propagate = False
         
         # Clear existing handlers
         for handler in logger.handlers[:]:
             logger.removeHandler(handler)
         
-        # File and console handlers
-        log_file = self.log_dir / f"evaluation_{self.session_id}.log"
+        # File handler
+        log_file = self.log_filename
         file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.INFO)
+        
+        # Console handler
         console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
         
         # Formatter
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -538,37 +541,45 @@ class EvaluationLogger:
 
 
 class ModelSetupLogger:
-    """Simple logging for model setup operations."""
+    """Logger for model setup phase."""
     
     def __init__(self, model_name: str, timestamp: Optional[str] = None):
         self.model_name = model_name
-        self.timestamp = timestamp or datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.session_id = f"{model_name}_{self.timestamp}"
+        self.session_id = f"{model_name}"
         
         # Setup directories
         self.log_dir = Path("logs")
         self.log_dir.mkdir(exist_ok=True)
         
-        # Setup logger
-        self.logger = self._setup_logger()
+        # Define log filename before setting up logger
         self.log_filename = self.log_dir / f"model_setup_{self.session_id}.log"
+        self.logger = self._setup_logger()
     
     def _setup_logger(self) -> logging.Logger:
-        """Setup logger with file and console handlers."""
+        """Setup logger for model setup."""
         logger = logging.getLogger(f"model_setup_{self.session_id}")
         logger.setLevel(logging.INFO)
+        logger.propagate = False
         
         # Clear existing handlers
         for handler in logger.handlers[:]:
             logger.removeHandler(handler)
         
-        # Console handler only (keep it simple for model setup)
+        # File handler
+        log_file = self.log_filename
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.INFO)
+        
+        # Console handler
         console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
         
         # Formatter
         formatter = logging.Formatter('%(message)s')  # Simple format for model setup
+        file_handler.setFormatter(formatter)
         console_handler.setFormatter(formatter)
         
+        logger.addHandler(file_handler)
         logger.addHandler(console_handler)
         
         return logger
@@ -651,11 +662,10 @@ class ModelSetupLogger:
 
 
 class ComparisonLogger:
-    """Centralized logging for model comparison experiments."""
+    """Logger for comparing multiple model experiments."""
     
     def __init__(self, timestamp: Optional[str] = None):
-        self.timestamp = timestamp or datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.session_id = f"comparison_{self.timestamp}"
+        self.session_id = "comparison"
         
         # Setup directories
         self.log_dir = Path("logs")
@@ -663,9 +673,9 @@ class ComparisonLogger:
         self.log_dir.mkdir(exist_ok=True)
         self.results_dir.mkdir(exist_ok=True)
         
-        # Setup logger
+        # Define log filename before setting up logger
+        self.log_filename = self.log_dir / f"{self.session_id}.log"
         self.logger = self._setup_logger()
-        self.log_filename = self.log_dir / f"comparison_{self.session_id}.log"
         
         # Experiment tracking
         self.experiment_start = datetime.datetime.now()
@@ -673,16 +683,17 @@ class ComparisonLogger:
         self.experiment_metadata = {}
     
     def _setup_logger(self) -> logging.Logger:
-        """Setup logger with file and console handlers."""
-        logger = logging.getLogger(f"comparison_{self.session_id}")
+        """Setup logger for comparison."""
+        logger = logging.getLogger(self.session_id)
         logger.setLevel(logging.INFO)
+        logger.propagate = False
         
         # Clear existing handlers
         for handler in logger.handlers[:]:
             logger.removeHandler(handler)
         
         # File handler
-        log_file = self.log_dir / f"comparison_{self.session_id}.log"
+        log_file = self.log_filename
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.INFO)
         
@@ -866,7 +877,6 @@ class ComparisonLogger:
         
         comparison_data = {
             'session_id': self.session_id,
-            'timestamp': self.timestamp,
             'start_time': self.experiment_start.isoformat(),
             'end_time': experiment_end.isoformat(),
             'total_time': str(experiment_end - self.experiment_start),
@@ -883,46 +893,54 @@ class ComparisonLogger:
             }
         }
         
-        results_file = self.results_dir / f"comparison_{self.session_id}.json"
+        results_file = self.results_dir / f"{self.session_id}.json"
         with open(results_file, 'w') as f:
-            json.dump(comparison_data, f, indent=2, default=str)
+            json.dump(comparison_data, f, indent=4)
         
-        self.logger.info(f"📊 Comparison results saved: {results_file}")
+        self.logger.info(f"💾 Comparison results saved to: {results_file}")
         return str(results_file)
 
 
 class DataSplitterLogger:
-    """Simple logging for data splitting operations."""
-    
+    """Logger for data splitting and preparation."""
+
     def __init__(self, dataset_name: str = "dataset", timestamp: Optional[str] = None):
         self.dataset_name = dataset_name
-        self.timestamp = timestamp or datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.session_id = f"{dataset_name}_{self.timestamp}"
+        self.session_id = f"{dataset_name}"
         
         # Setup directories
         self.log_dir = Path("logs")
         self.log_dir.mkdir(exist_ok=True)
         
-        # Setup logger
+        # Define log filename before setting up logger
+        self.log_filename = self.log_dir / f"data_splitter_{self.session_id}.log"
         self.logger = self._setup_logger()
-        self.log_filename = self.log_dir / f"data_split_{self.session_id}.log"
     
     def _setup_logger(self) -> logging.Logger:
-        """Setup logger with file and console handlers."""
-        logger = logging.getLogger(f"data_split_{self.session_id}")
+        """Setup logger for data splitting."""
+        logger = logging.getLogger(f"data_splitter_{self.session_id}")
         logger.setLevel(logging.INFO)
+        logger.propagate = False
         
         # Clear existing handlers
         for handler in logger.handlers[:]:
             logger.removeHandler(handler)
         
-        # Console handler only (keep it simple for data splitting)
+        # File handler
+        log_file = self.log_filename
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.INFO)
+        
+        # Console handler
         console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
         
         # Formatter
         formatter = logging.Formatter('%(message)s')  # Simple format for data splitting
+        file_handler.setFormatter(formatter)
         console_handler.setFormatter(formatter)
         
+        logger.addHandler(file_handler)
         logger.addHandler(console_handler)
         
         return logger

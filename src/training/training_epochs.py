@@ -1,7 +1,7 @@
 import torch
 import os
-from torch.amp.autocast_mode import autocast
-from torch.amp.grad_scaler import GradScaler
+from torch import autocast
+from torch.cuda.amp import GradScaler
 from tqdm import tqdm
 import datetime
 import glob
@@ -31,10 +31,27 @@ def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False
     if training_logger:
         training_logger.log_debug_info(train_loader, model, epoch)
 
+    # Create a single GradScaler per epoch (recommended) rather than one per batch
+    scaler = GradScaler(enabled=use_amp and device.type == 'cuda')
+
     pbar = tqdm(train_loader, desc="Training", leave=False)
 
     for batch_idx, (images, labels) in enumerate(pbar):
         images, labels = images.to(device), labels.to(device)
+
+        # --------------------------------------------------------------
+        # FEW-SHOT SUPPORT: skip batches that contain *no* valid labels
+        # (all labels == ignore_index => nothing to learn, avoid scaler error)
+        # --------------------------------------------------------------
+        valid_mask = labels != -1
+        if valid_mask.sum() == 0:
+            # Optionally log the skipped batch for debug purposes
+            if training_logger and batch_idx == 0 and epoch == 0:
+                training_logger.logger.info("⚠️  Skipping batch with no labeled samples (few-shot)")
+            continue
+
+        images = images[valid_mask]
+        labels = labels[valid_mask]
 
         # Debug first batch of first epoch
         if training_logger:
@@ -43,7 +60,6 @@ def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False
         optimizer.zero_grad()
 
         if use_amp:
-            scaler = GradScaler('cuda')
             with autocast('cuda'):
                 outputs = model(images)
                 loss = criterion(outputs, labels)
@@ -170,10 +186,11 @@ def cleanup_checkpoint_files(timestamp, model_name, keep_best=True, keep_final=T
     save_dir = getattr(config_module, "SAVE_DIR", None)
     if save_dir is None:
         raise AttributeError("The config_module does not have a SAVE_DIR attribute.")
-
-    checkpoint_pattern = os.path.join(save_dir, f"checkpoint_*_{model_id}_*{timestamp}.pth")
-    best_pattern = os.path.join(save_dir, f"best_{model_id}_*{timestamp}.pth")
-    final_pattern = os.path.join(save_dir, f"final_{model_id}_*{timestamp}.pth")
+        
+    # Build glob patterns without timestamps
+    checkpoint_pattern = os.path.join(save_dir, f"checkpoint_*_{model_id}_*.pth")
+    best_pattern = os.path.join(save_dir, f"best_{model_id}_*.pth")
+    final_pattern = os.path.join(save_dir, f"final_{model_id}_*.pth")
 
     # Delete all intermediate checkpoints
     for file_path in glob.glob(checkpoint_pattern):
@@ -192,7 +209,8 @@ def cleanup_checkpoint_files(timestamp, model_name, keep_best=True, keep_final=T
         best_file = None
         best_acc = -1
         for f in best_files:
-            match = re.search(r'acc([0-9.]+)', f) # cleanup logic
+            # Updated regex to handle filenames without timestamps
+            match = re.search(r'_acc([0-9.]+).pth', f)
             if match:
                 acc = float(match.group(1))
                 if acc > best_acc:
@@ -228,7 +246,8 @@ def cleanup_checkpoint_files(timestamp, model_name, keep_best=True, keep_final=T
         best_file = None
         best_acc = -1
         for f in final_files:
-            match = re.search(r'acc([0-9.]+)', f) # cleanup logic
+            # Updated regex to handle filenames without timestamps
+            match = re.search(r'_acc([0-9.]+).pth', f)
             if match:
                 acc = float(match.group(1))
                 if acc > best_acc:

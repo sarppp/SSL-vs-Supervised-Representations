@@ -262,6 +262,12 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             )
             labeled_samples_count = sum(labeled_mask)
             print(f"🎯 COMPACT SCRIPT: Label Hiding Applied: {labeled_samples_count}/{len(train_paths)} samples have labels")
+            few_shot_info = {
+                'mode': few_shot_mode,
+                'value': few_shot_value,
+                'labeled_count': labeled_samples_count,
+                'total_count': len(train_paths)
+            }
         else:
             print(f"🎯 COMPACT SCRIPT: Few-shot DISABLED - All {len(train_paths)} samples have labels")
         
@@ -346,6 +352,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             'epochs': active_config.EPOCHS,
             'few_shot_mode': few_shot_mode,
             'few_shot_value': few_shot_value,
+            'few_shot_info': few_shot_info,
         }
         
     except Exception as e:
@@ -374,10 +381,10 @@ def main():
     # SAMPLE_SIZE = 500                             # Use exactly 500 samples
     
     # 🎯 TRUE FEW-SHOT LEARNING Configuration (LABEL HIDING - not dataset reduction):
-    FEW_SHOT_MODE = None                            # Disable few-shot learning
-    # FEW_SHOT_MODE = 'percentage'                  # Hide labels: only X% of data has labels
+    #FEW_SHOT_MODE = None                            # Disable few-shot learning
+    FEW_SHOT_MODE = 'percentage'                  # Hide labels: only X% of data has labels
     # FEW_SHOT_MODE = 'per_class'                   # Hide labels: only X samples per class have labels
-    FEW_SHOT_VALUE = 0.1                           # 10% labeled data OR 5 samples per class
+    FEW_SHOT_VALUE = 0.01                           # 10% labeled data OR 5 samples per class
     
     # 💡 TRUE FEW-SHOT means: Model sees ALL images but most labels are hidden (-1)
     # 💡 This is different from dataset reduction (which would show fewer images)
