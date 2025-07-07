@@ -7,12 +7,24 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 CLEAN_DATASET_PICKLE = os.path.join(PROJECT_ROOT, "clean_dataset.pkl")
 BASE_DATA_DIR = os.path.join(PROJECT_ROOT, "crop_pest_data")
 
-# Model paths (using new organized structure)
-MODELS_DIR = os.path.join(PROJECT_ROOT, "checkpoints")  # Renamed for clarity
-CHECKPOINTS_DIR = os.path.join(PROJECT_ROOT, "checkpoints")
+# ------------------------------------------------------------------
+# Output hierarchy
+#   outputs/
+#       checkpoints/   ← saved weights & checkpoints
+#       logs/          ← text / json logs
+#       visualizations/← figures
+# ------------------------------------------------------------------
+
+# Base *outputs* folder lives in the project root
+OUTPUTS_DIR = os.path.join(PROJECT_ROOT, "outputs")
+
+# Checkpoints (and legacy "models") directory live **inside** outputs
+CHECKPOINTS_DIR = os.path.join(OUTPUTS_DIR, "checkpoints")
+
+# Back-compat alias – some code still expects ``MODELS_DIR``
+MODELS_DIR = CHECKPOINTS_DIR
 
 # Output paths (using new organized structure)
-OUTPUTS_DIR = os.path.join(PROJECT_ROOT, "outputs")
 LOGS_DIR = os.path.join(OUTPUTS_DIR, "logs")
 VISUALIZATIONS_DIR = os.path.join(OUTPUTS_DIR, "visualizations")
 
