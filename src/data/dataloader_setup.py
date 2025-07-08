@@ -36,6 +36,7 @@ def create_dataloaders(train_paths, train_labels, val_paths, val_labels, test_pa
         fallback_size=config_module.IMAGE_SIZE,
         class_to_idx=class_to_idx,
         ignore_index=IGNORE_INDEX,
+        validate_images=getattr(config_module, 'VALIDATE_IMAGES', True),
     )
 
     val_dataset = custom_dataset.CustomCropDataset(
@@ -45,6 +46,7 @@ def create_dataloaders(train_paths, train_labels, val_paths, val_labels, test_pa
         fallback_size=config_module.IMAGE_SIZE,
         class_to_idx=class_to_idx,
         ignore_index=IGNORE_INDEX,
+        validate_images=getattr(config_module, 'VALIDATE_IMAGES', True),
     )
 
     test_dataset = custom_dataset.CustomCropDataset(
@@ -54,6 +56,7 @@ def create_dataloaders(train_paths, train_labels, val_paths, val_labels, test_pa
         fallback_size=config_module.IMAGE_SIZE,
         class_to_idx=class_to_idx,
         ignore_index=IGNORE_INDEX,
+        validate_images=getattr(config_module, 'VALIDATE_IMAGES', True),
     )
     
     # 🔧 FIX: Use smaller batch size for large test sets to reduce memory pressure

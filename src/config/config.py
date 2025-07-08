@@ -7,8 +7,12 @@ BATCH_SIZE = 64
 NUM_WORKERS = 4  # Optimal for 6-core system (fixed Docker shm)
 MAX_WORKERS = mp.cpu_count()
 
+# Image Validation (pre-load corruption check)
+# Set to False if images are already validated to skip expensive checks
+VALIDATE_IMAGES = False
+
 # Learning Rate Warmup
-USE_WARMUP = False  # Set to True to enable
+USE_WARMUP = True  # Set to True to enable
 WARMUP_EPOCHS = 5   # Number of epochs to warm up
 WARMUP_START_LR = 1e-6  # Starting LR for warmup
 
@@ -36,6 +40,13 @@ EPOCHS = 15  # Increased to match DINOV2 for fair comparison
 PATIENCE = 3  # For LR scheduler
 LR_FACTOR = 0.5
 DROPOUT = 0.2
+
+# Backbone Freeze / Progressive Unfreezing (for CNNs to match DINO settings)
+# When FREEZE_BACKBONE is True, feature extractor layers start frozen and are
+# unfrozen after UNFREEZE_AFTER_EPOCH epochs.  This mirrors the DINOv2 strategy.
+FREEZE_BACKBONE = True
+UNFREEZE_AFTER_EPOCH = 3   # Unfreeze early for domain adaptation
+UNFREEZE_LR_FACTOR = 0.1   # Multiply LR by this factor when unfreezing
 
 # Research Paper Settings
 USE_SIMPLE_HEAD = True  # Use simple linear heads for fair comparison

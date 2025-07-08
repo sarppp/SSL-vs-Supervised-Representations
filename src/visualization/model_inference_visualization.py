@@ -278,8 +278,8 @@ def main():
     print("=" * 50)
     
     # Model paths (update these to match your actual model files)
-    cnn_model_path = 'models/best_cnn_b4_label_100_acc75.80.pth'
-    dinov2_model_path = 'models/best_dino_vits14_label_100_acc71.81.pth'
+    cnn_model_path = 'models/best_cnn_b4_label_100_acc86.54.pth'
+    dinov2_model_path = 'models/best_dino_vits14_label_100_acc89.49.pth'
     
     # Check if models exist
     if not os.path.exists(cnn_model_path):

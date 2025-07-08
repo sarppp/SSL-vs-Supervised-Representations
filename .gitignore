@@ -45,6 +45,7 @@ visualizations/
 __pycache__/
 .DS_Store
 outputs/
+quantized_models/
 
 # Local tooling / IDE servers and caches
 .lightning_studio/

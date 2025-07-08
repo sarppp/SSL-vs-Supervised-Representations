@@ -8,6 +8,12 @@ import psutil
 from pathlib import Path
 from tqdm import tqdm
 
+# Disable xformers globally for quantization compatibility
+os.environ['XFORMERS_DISABLED'] = '1'
+os.environ['TORCH_USE_XFORMERS'] = '0'
+os.environ['XFORMERS_FORCE_DISABLE_TRITON'] = '1'
+os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
+
 # Add project root to Python path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -73,11 +79,65 @@ class ResearchQuantizer:
         print(f"[QUANT] {method.upper()} quantization completed for CNN")
         return quantized_model
     
+    def disable_xformers_attention(self, model):
+        """Disable xformers memory efficient attention for CPU compatibility"""
+        print("[QUANT] Disabling xformers attention for CPU compatibility...")
+        
+        def _disable_xformers_recursively(module):
+            # Handle DINOv2 attention modules specifically
+            module_name = module.__class__.__name__
+            
+            # Common patterns for DINOv2 attention
+            if 'Attention' in module_name:
+                # Disable xformers flags
+                if hasattr(module, 'use_memory_efficient_attention'):
+                    module.use_memory_efficient_attention = False
+                    print(f"[QUANT] Disabled use_memory_efficient_attention in {module_name}")
+                
+                # Force regular attention implementation
+                if hasattr(module, '_use_memory_efficient_attention_xformers'):
+                    module._use_memory_efficient_attention_xformers = False
+                    print(f"[QUANT] Disabled _use_memory_efficient_attention_xformers in {module_name}")
+                
+                # Set xformers availability to False
+                if hasattr(module, 'xformers_available'):
+                    module.xformers_available = False
+                    print(f"[QUANT] Set xformers_available=False in {module_name}")
+            
+            # Check attention within transformer blocks
+            if hasattr(module, 'attn'):
+                attn_module = module.attn
+                if hasattr(attn_module, 'use_memory_efficient_attention'):
+                    attn_module.use_memory_efficient_attention = False
+                    print(f"[QUANT] Disabled xformers in {module_name}.attn")
+                if hasattr(attn_module, '_use_memory_efficient_attention_xformers'):
+                    attn_module._use_memory_efficient_attention_xformers = False
+                    print(f"[QUANT] Disabled xformers flags in {module_name}.attn")
+            
+            # Recursively apply to all child modules
+            for name, child in module.named_children():
+                _disable_xformers_recursively(child)
+        
+        # Apply recursively to all modules
+        _disable_xformers_recursively(model)
+        
+        # Set additional environment variables for xformers
+        import os
+        os.environ['XFORMERS_DISABLED'] = '1'
+        os.environ['TORCH_USE_XFORMERS'] = '0'
+        os.environ['XFORMERS_FORCE_DISABLE_TRITON'] = '1'
+        
+        print("[QUANT] xformers attention disabled successfully")
+        return model
+    
     def quantize_dino(self, model, method='dynamic'):
         """Comprehensive DINOv2 quantization optimized for ViT architecture"""
         print(f"[QUANT] Applying {method} quantization to DINOv2...")
         model.eval()
         model.cpu()
+        
+        # Disable xformers attention before quantization for CPU compatibility
+        model = self.disable_xformers_attention(model)
         
         if method == 'dynamic':
             # For ViT, Linear layers are the computational bottleneck
@@ -98,17 +158,22 @@ class ResearchQuantizer:
         print(f"[QUANT] {method.upper()} quantization completed for DINOv2")
         return quantized_model
     
-    def comprehensive_evaluation(self, model, dataloader, device='cpu', name="Model", full_dataset=True):
+    def comprehensive_evaluation(self, model, dataloader, device='cpu', name="Model", full_dataset=True, force_cpu_comparison=True):
         """Comprehensive performance evaluation for research analysis"""
         print(f"[EVAL] Comprehensive evaluation of {name}...")
         
-        # Handle quantized models - they must run on CPU
-        if hasattr(model, 'qconfig') and model.qconfig is not None:
-            device = 'cpu'
-            print(f"[EVAL] Quantized model detected - using CPU")
+        # Fair comparison logic - quantized models must run on CPU for now
+        is_quantized = hasattr(model, 'qconfig') and model.qconfig is not None
+        
+        if force_cpu_comparison or is_quantized:
+            # For fair comparison, run both original and quantized on CPU
+            eval_device = 'cpu'
+            model.cpu()
+            print(f"[EVAL] Running on CPU for fair comparison (quantized models require CPU)")
         else:
+            eval_device = device
             model.to(device)
-            print(f"[EVAL] Original model - using {device}")
+            print(f"[EVAL] Running on {device}")
         
         model.eval()
         
@@ -119,15 +184,14 @@ class ResearchQuantizer:
         class_correct = {}
         class_total = {}
         
-        # Memory measurement setup
-        if device == 'cuda':
-            torch.cuda.empty_cache()
-            initial_memory = torch.cuda.memory_allocated() / 1e6
-        else:
-            process = psutil.Process()
-            initial_memory = process.memory_info().rss / 1e6
-        
+        # Memory measurement setup - consistent approach
+        process = psutil.Process()
+        initial_memory = process.memory_info().rss / 1e6  # Always use system memory for consistency
         peak_memory = initial_memory
+        
+        # Clear any GPU memory if we were using it before
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         
         # Comprehensive evaluation
         max_batches = len(dataloader) if full_dataset else min(50, len(dataloader))
@@ -137,15 +201,22 @@ class ResearchQuantizer:
             for i, (images, labels) in enumerate(tqdm(dataloader, total=max_batches, desc=f"Evaluating {name}")):
                 batch_start = time.time()
                 
-                # Handle quantized models
-                if hasattr(model, 'qconfig') and model.qconfig is not None:
-                    images, labels = images.cpu(), labels.cpu()
-                else:
-                    images, labels = images.to(device), labels.to(device)
+                # Ensure data is on correct device
+                images, labels = images.to(eval_device), labels.to(eval_device)
                 
                 # Measure inference time per batch
                 inference_start = time.time()
-                outputs = model(images)
+                try:
+                    outputs = model(images)
+                except Exception as e:
+                    if "memory_efficient_attention" in str(e) or "xformers" in str(e).lower():
+                        print(f"[ERROR] xformers/attention error detected: {e}")
+                        print("[FIX] Attempting to disable xformers and retry...")
+                        # Try to disable xformers on the model
+                        self.disable_xformers_attention(model)
+                        outputs = model(images)
+                    else:
+                        raise e
                 inference_time = time.time() - inference_start
                 inference_times.append(inference_time / images.size(0))  # Per image
                 
@@ -166,11 +237,8 @@ class ResearchQuantizer:
                     if label == pred:
                         class_correct[label] += 1
                 
-                # Memory tracking
-                if device == 'cuda':
-                    current_memory = torch.cuda.memory_allocated() / 1e6
-                else:
-                    current_memory = process.memory_info().rss / 1e6
+                # Memory tracking - consistent system memory measurement
+                current_memory = process.memory_info().rss / 1e6
                 peak_memory = max(peak_memory, current_memory)
                 
                 # Break if not full dataset evaluation
@@ -204,10 +272,12 @@ class ResearchQuantizer:
             'throughput_imgs_per_sec': throughput,
             'class_accuracies': class_accuracies,
             'num_classes_evaluated': len(class_accuracies),
-            'evaluation_batches': min(i + 1, max_batches)
+            'evaluation_batches': min(i + 1, max_batches),
+            'evaluation_device': eval_device,
+            'is_quantized': is_quantized
         }
         
-        print(f"[EVAL] {name} - Accuracy: {accuracy:.1%}, Speed: {avg_inference_time:.2f}±{std_inference_time:.2f}ms, Memory: {memory_usage:.1f}MB")
+        print(f"[EVAL] {name} - Accuracy: {accuracy:.1%}, Speed: {avg_inference_time:.2f}±{std_inference_time:.2f}ms, Memory: {memory_usage:.1f}MB, Device: {eval_device}")
         return metrics
     
     def get_model_size_mb(self, model):
@@ -352,6 +422,123 @@ class ResearchQuantizer:
         print(f"[SAVE] Size: {size_info['size_mb']:.1f}MB, Compression: {research_metrics['size_reduction_factor']:.1f}x")
         return filepath
 
+    def save_research_log(self, cnn_original_metrics, cnn_quant_metrics, cnn_research_metrics, 
+                         dino_original_metrics, dino_quant_metrics, dino_research_metrics,
+                         cnn_original_size, cnn_quant_size, dino_original_size, dino_quant_size,
+                         total_samples, num_classes, cnn_quant_time, dino_quant_time):
+        """Save comprehensive research log file"""
+        timestamp = time.strftime('%Y%m%d_%H%M%S')
+        log_filename = f"quantization_research_log_{timestamp}.txt"
+        log_filepath = self.save_dir / log_filename
+        
+        with open(log_filepath, 'w') as f:
+            f.write("=" * 90 + "\n")
+            f.write("🔬 RESEARCH-GRADE QUANTIZATION ANALYSIS LOG\n")
+            f.write("=" * 90 + "\n")
+            f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Purpose: Comprehensive quantization study for agricultural drone deployment\n")
+            f.write(f"Focus: Accuracy preservation vs. efficiency gains\n")
+            f.write(f"PyTorch Version: {torch.__version__}\n")
+            f.write(f"Quantization Backend: {torch.backends.quantized.engine}\n")
+            f.write(f"Device Used: {'CUDA' if torch.cuda.is_available() else 'CPU'}\n")
+            f.write("=" * 90 + "\n\n")
+            
+            # Dataset information
+            f.write("📊 DATASET SUMMARY\n")
+            f.write("-" * 50 + "\n")
+            f.write(f"Total samples evaluated: {total_samples:,}\n")
+            f.write(f"Number of classes: {num_classes}\n")
+            f.write(f"Evaluation batches: {cnn_quant_metrics['evaluation_batches']}\n\n")
+            
+            # Detailed performance table
+            f.write("📈 DETAILED PERFORMANCE ANALYSIS\n")
+            f.write("-" * 100 + "\n")
+            f.write(f"{'Model':<25} | {'Accuracy':>8} | {'Speed (ms)':>11} | {'±StdDev':>8} | {'Memory (MB)':>11} | {'Throughput':>10} | {'Drone Score':>11}\n")
+            f.write("-" * 100 + "\n")
+            f.write(f"{'CNN Original':<25} | {cnn_original_metrics['accuracy']:7.1%} | {cnn_original_metrics['inference_time_ms_mean']:10.2f} | {cnn_original_metrics['inference_time_ms_std']:7.2f} | {cnn_original_metrics['memory_usage_mb']:10.1f} | {cnn_original_metrics['throughput_imgs_per_sec']:9.1f} | {self.calculate_research_drone_score(cnn_original_metrics, cnn_original_size):10.1f}\n")
+            f.write(f"{'CNN Quantized':<25} | {cnn_quant_metrics['accuracy']:7.1%} | {cnn_quant_metrics['inference_time_ms_mean']:10.2f} | {cnn_quant_metrics['inference_time_ms_std']:7.2f} | {cnn_quant_metrics['memory_usage_mb']:10.1f} | {cnn_quant_metrics['throughput_imgs_per_sec']:9.1f} | {cnn_research_metrics['drone_deployment_score']:10.1f}\n")
+            f.write(f"{'DINOv2 Original':<25} | {dino_original_metrics['accuracy']:7.1%} | {dino_original_metrics['inference_time_ms_mean']:10.2f} | {dino_original_metrics['inference_time_ms_std']:7.2f} | {dino_original_metrics['memory_usage_mb']:10.1f} | {dino_original_metrics['throughput_imgs_per_sec']:9.1f} | {self.calculate_research_drone_score(dino_original_metrics, dino_original_size):10.1f}\n")
+            f.write(f"{'DINOv2 Quantized':<25} | {dino_quant_metrics['accuracy']:7.1%} | {dino_quant_metrics['inference_time_ms_mean']:10.2f} | {dino_quant_metrics['inference_time_ms_std']:7.2f} | {dino_quant_metrics['memory_usage_mb']:10.1f} | {dino_quant_metrics['throughput_imgs_per_sec']:9.1f} | {dino_research_metrics['drone_deployment_score']:10.1f}\n")
+            f.write("\n")
+            
+            # Research insights
+            f.write("🔍 QUANTIZATION RESEARCH INSIGHTS\n")
+            f.write("-" * 50 + "\n")
+            f.write("CNN Results:\n")
+            f.write(f"  • Accuracy Retention: {cnn_research_metrics['accuracy_retention_percent']:.1f}%\n")
+            f.write(f"  • Size Reduction: {cnn_research_metrics['size_reduction_factor']:.1f}x ({cnn_original_size['size_mb']:.1f}MB → {cnn_quant_size['size_mb']:.1f}MB)\n")
+            f.write(f"  • Speed Improvement: {cnn_research_metrics['speed_improvement_factor']:.1f}x\n")
+            f.write(f"  • Memory Efficiency: {cnn_research_metrics['memory_reduction_factor']:.1f}x improvement\n")
+            f.write(f"  • Parameter Reduction: {cnn_research_metrics['parameter_reduction_factor']:.1f}x\n")
+            f.write(f"  • Overall Efficiency Score: {cnn_research_metrics['efficiency_score']:.1f}\n\n")
+            
+            f.write("DINOv2 Results:\n")
+            f.write(f"  • Accuracy Retention: {dino_research_metrics['accuracy_retention_percent']:.1f}%\n")
+            f.write(f"  • Size Reduction: {dino_research_metrics['size_reduction_factor']:.1f}x ({dino_original_size['size_mb']:.1f}MB → {dino_quant_size['size_mb']:.1f}MB)\n")
+            f.write(f"  • Speed Improvement: {dino_research_metrics['speed_improvement_factor']:.1f}x\n")
+            f.write(f"  • Memory Efficiency: {dino_research_metrics['memory_reduction_factor']:.1f}x improvement\n")
+            f.write(f"  • Parameter Reduction: {dino_research_metrics['parameter_reduction_factor']:.1f}x\n")
+            f.write(f"  • Overall Efficiency Score: {dino_research_metrics['efficiency_score']:.1f}\n\n")
+            
+            # Model comparison and recommendation
+            models_comparison = [
+                ('CNN Original', self.calculate_research_drone_score(cnn_original_metrics, cnn_original_size), cnn_original_metrics, cnn_original_size),
+                ('CNN Quantized', cnn_research_metrics['drone_deployment_score'], cnn_quant_metrics, cnn_quant_size),
+                ('DINOv2 Original', self.calculate_research_drone_score(dino_original_metrics, dino_original_size), dino_original_metrics, dino_original_size),
+                ('DINOv2 Quantized', dino_research_metrics['drone_deployment_score'], dino_quant_metrics, dino_quant_size)
+            ]
+            
+            best_model = max(models_comparison, key=lambda x: x[1])
+            
+            f.write("🎯 RESEARCH CONCLUSIONS & RECOMMENDATIONS\n")
+            f.write("-" * 50 + "\n")
+            f.write(f"🏆 OPTIMAL MODEL FOR AGRICULTURAL DRONE DEPLOYMENT: {best_model[0]}\n")
+            f.write(f"   Research Drone Score: {best_model[1]:.1f}/100\n")
+            f.write(f"   Accuracy: {best_model[2]['accuracy']:.1%}\n")
+            f.write(f"   Inference Speed: {best_model[2]['inference_time_ms_mean']:.2f}±{best_model[2]['inference_time_ms_std']:.2f}ms\n")
+            f.write(f"   Memory Usage: {best_model[2]['memory_usage_mb']:.1f}MB\n")
+            f.write(f"   Model Size: {best_model[3]['size_mb']:.1f}MB\n")
+            f.write(f"   Throughput: {best_model[2]['throughput_imgs_per_sec']:.1f} images/second\n\n")
+            
+            # Timing summary
+            total_time = cnn_quant_time + dino_quant_time
+            f.write("⏱️  RESEARCH TIMING SUMMARY\n")
+            f.write("-" * 50 + "\n")
+            f.write(f"   • CNN quantization: {cnn_quant_time:.2f}s\n")
+            f.write(f"   • DINOv2 quantization: {dino_quant_time:.2f}s\n")
+            f.write(f"   • Total quantization time: {total_time:.2f}s\n")
+            f.write(f"   • Evaluation thoroughness: Comprehensive (full test set)\n\n")
+            
+            # Per-class accuracy details (sample)
+            f.write("📊 PER-CLASS ACCURACY ANALYSIS\n")
+            f.write("-" * 50 + "\n")
+            f.write("CNN Quantized per-class accuracy:\n")
+            for class_id, acc in list(cnn_quant_metrics['class_accuracies'].items())[:10]:  # Show first 10
+                f.write(f"  Class {class_id}: {acc:.1%}\n")
+            if len(cnn_quant_metrics['class_accuracies']) > 10:
+                f.write(f"  ... and {len(cnn_quant_metrics['class_accuracies']) - 10} more classes\n")
+            
+            f.write("\nDINOv2 Quantized per-class accuracy:\n")
+            for class_id, acc in list(dino_quant_metrics['class_accuracies'].items())[:10]:  # Show first 10
+                f.write(f"  Class {class_id}: {acc:.1%}\n")
+            if len(dino_quant_metrics['class_accuracies']) > 10:
+                f.write(f"  ... and {len(dino_quant_metrics['class_accuracies']) - 10} more classes\n")
+            
+            f.write("\n" + "=" * 90 + "\n")
+            f.write("📝 RESEARCH NOTES:\n")
+            f.write("   • Models saved with comprehensive metadata for paper writing\n")
+            f.write("   • Per-class accuracy metrics included for detailed analysis\n")
+            f.write("   • Statistical measures (mean, std) provided for reproducibility\n")
+            f.write("   • Device and environment information saved for methodology section\n")
+            f.write("   • All quantization used dynamic quantization with fbgemm backend\n")
+            f.write("   • xformers attention disabled for CPU compatibility\n")
+            f.write("   • FAIR COMPARISON: Both original and quantized models evaluated on CPU\n")
+            f.write("   • This ensures valid performance comparison (quantized models require CPU)\n")
+            f.write("=" * 90 + "\n")
+        
+        print(f"[LOG] Research log saved: {log_filename}")
+        return log_filepath
+
 def main():
     print("🔬 RESEARCH-GRADE QUANTIZATION ANALYSIS")
     print("=" * 70)
@@ -437,21 +624,22 @@ def main():
     )
     
     # Model paths (research models)
-    cnn_path = '/home/models/best_cnn_b4_acc76.06_20250703_124117.pth'
-    dino_path = '/home/models/best_dino_vits14_acc75.00_20250703_124256.pth'
+    cnn_path = 'models/best_cnn_b4_label_100_acc86.54.pth'
+    dino_path = 'models/best_dino_vits14_label_100_acc89.49.pth'
     
     # Load original models for research
     print("\n[MODELS] Loading research models...")
     cnn_original, class_names = quantizer.load_original_model(cnn_path, config_cnn, 'efficientnet_b4')
     dino_original, _ = quantizer.load_original_model(dino_path, config_dinov2, 'dinov2_vits14')
     
-    # Comprehensive evaluation of original models
+    # Comprehensive evaluation of original models (CPU for fair comparison)
     print("\n[RESEARCH] Comprehensive evaluation of original models...")
+    print("[NOTE] Running all models on CPU for fair comparison with quantized models")
     cnn_original_metrics = quantizer.comprehensive_evaluation(
-        cnn_original, cnn_test_loader, device, "CNN Original", full_dataset=True
+        cnn_original, cnn_test_loader, device, "CNN Original", full_dataset=True, force_cpu_comparison=True
     )
     dino_original_metrics = quantizer.comprehensive_evaluation(
-        dino_original, dino_test_loader, device, "DINOv2 Original", full_dataset=True
+        dino_original, dino_test_loader, device, "DINOv2 Original", full_dataset=True, force_cpu_comparison=True
     )
     
     # Get detailed size information
@@ -481,10 +669,10 @@ def main():
     # Comprehensive evaluation of quantized models
     print("\n[RESEARCH] Comprehensive evaluation of quantized models...")
     cnn_quant_metrics = quantizer.comprehensive_evaluation(
-        quant_cnn_dynamic, cnn_test_loader, 'cpu', "CNN Quantized", full_dataset=True
+        quant_cnn_dynamic, cnn_test_loader, 'cpu', "CNN Quantized", full_dataset=True, force_cpu_comparison=True
     )
     dino_quant_metrics = quantizer.comprehensive_evaluation(
-        quant_dino_dynamic, dino_test_loader, 'cpu', "DINOv2 Quantized", full_dataset=True
+        quant_dino_dynamic, dino_test_loader, 'cpu', "DINOv2 Quantized", full_dataset=True, force_cpu_comparison=True
     )
     
     # Get quantized model size information
@@ -511,10 +699,20 @@ def main():
         dino_research_metrics, class_names, dino_quant_size
     )
     
+    # Save research log
+    quantizer.save_research_log(
+        cnn_original_metrics, cnn_quant_metrics, cnn_research_metrics, 
+        dino_original_metrics, dino_quant_metrics, dino_research_metrics,
+        cnn_original_size, cnn_quant_size, dino_original_size, dino_quant_size,
+        total_samples, len(set(sample_labels)), cnn_quant_time, dino_quant_time
+    )
+    
     # Comprehensive Research Results
     print("\n" + "=" * 90)
-    print("📊 COMPREHENSIVE RESEARCH RESULTS")
+    print("📊 COMPREHENSIVE RESEARCH RESULTS (FAIR CPU COMPARISON)")
     print("=" * 90)
+    print("⚠️  NOTE: All models evaluated on CPU for fair comparison")
+    print("   (Quantized models currently require CPU; comparing GPU vs CPU would be misleading)")
     
     # Detailed comparison table
     print(f"\n🔬 DETAILED PERFORMANCE ANALYSIS")
@@ -580,6 +778,8 @@ def main():
     print(f"   • Per-class accuracy metrics included for detailed analysis")
     print(f"   • Statistical measures (mean, std) provided for reproducibility")
     print(f"   • Device and environment information saved for methodology section")
+    print(f"   • FAIR COMPARISON: Both original and quantized models evaluated on CPU")
+    print(f"   • This ensures valid performance comparison (quantized models require CPU)")
     
     # Research timing summary
     total_time = cnn_quant_time + dino_quant_time

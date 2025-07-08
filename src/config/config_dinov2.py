@@ -7,8 +7,12 @@ BATCH_SIZE = 64  # Smaller batch size due to larger models
 NUM_WORKERS = 4  # Optimal for 6-core system (fixed Docker shm)
 MAX_WORKERS = mp.cpu_count()
 
+# Image Validation (pre-load corruption check)
+# Set to False if images are already validated to skip expensive checks
+VALIDATE_IMAGES = False
+
 # Learning Rate Warmup (more important for DINOv2)
-USE_WARMUP = False
+USE_WARMUP = True
 WARMUP_EPOCHS = 5
 WARMUP_START_LR = 1e-7
 
@@ -120,7 +124,7 @@ SCHEDULER_PARAMS = {
 }
 
 # Early Stopping (more patience for DINOv2)
-EARLY_STOPPING_PATIENCE = 10
+EARLY_STOPPING_PATIENCE = 3
 MIN_DELTA = 0.0005
 OVERFITTING_THRESHOLD = 0.05  # More tolerant for self-supervised
 

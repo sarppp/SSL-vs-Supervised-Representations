@@ -143,8 +143,11 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
     model_name = active_config.MODEL_NAME
     
     # Quick config overrides for fast testing
-    active_config.EPOCHS = 2
-    active_config.BATCH_SIZE = min(32, active_config.BATCH_SIZE)
+    active_config.EPOCHS = 20
+    active_config.BATCH_SIZE = min(64, active_config.BATCH_SIZE)
+    # Disable image pre-validation at runtime for faster experiments.  
+    # Flip to True if you want to re-run the expensive corruption checks.
+    setattr(active_config, 'VALIDATE_IMAGES', False)
     
     # 🔧 OVERRIDE CONFIG FEW-SHOT SETTINGS (prevent other modules from activating few-shot)
     if few_shot_mode is None:
@@ -163,6 +166,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             'batch_size': active_config.BATCH_SIZE,
             'image_size': active_config.IMAGE_SIZE,
             'learning_rate': active_config.LEARNING_RATE,
+            'validate_images': getattr(active_config, 'VALIDATE_IMAGES', False),
             'few_shot_mode': few_shot_mode,
             'few_shot_value': few_shot_value
         }
@@ -366,6 +370,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             'few_shot_mode': few_shot_mode,
             'few_shot_value': few_shot_value,
             'few_shot_info': few_shot_info,
+            'validate_images': getattr(active_config, 'VALIDATE_IMAGES', False),
         }
         
         if comparison_logger:
@@ -393,8 +398,8 @@ def main():
     total_dataset_size = len(temp_train) + len(temp_val) + len(temp_test)
     
     # 📊 DATASET SIZE Configuration:
-    SAMPLE_SIZE = int(total_dataset_size * 0.1)     # ✅ CURRENTLY ACTIVE: Use 10% of dataset  
-    # SAMPLE_SIZE = None                            # Use full dataset (~25K samples)
+    #SAMPLE_SIZE = int(total_dataset_size * 0.1)     # ✅ CURRENTLY ACTIVE: Use 10% of dataset  
+    SAMPLE_SIZE = None                            # Use full dataset (~25K samples)
     # SAMPLE_SIZE = int(total_dataset_size * 0.01)  # Use 1% of dataset
     # SAMPLE_SIZE = 500                             # Use exactly 500 samples
     
