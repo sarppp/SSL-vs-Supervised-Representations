@@ -29,6 +29,7 @@ checkpoints/
 
 # Ignore data, models, outputs, and other large files
 models/
+!src/models/
 crop_pest_data/
 evaluation_results/
 training_results/
