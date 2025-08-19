@@ -74,14 +74,17 @@ def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False
 
         total_loss += loss.item()
         _, predicted = torch.max(outputs.data, 1)
-        total += labels.size(0)
-        correct += (predicted == labels).sum().item()
+        
+        # Only count labeled samples (ignore -1 labels for accuracy)
+        valid_mask = labels != -1
+        total += valid_mask.sum().item()
+        correct += ((predicted == labels) & valid_mask).sum().item()
 
         # Monitor progress every N batches (configurable)
         debug_batches_interval = getattr(config_module, "DEBUG_BATCHES_INTERVAL", 10)
         debug_first_n_epochs = getattr(config_module, "DEBUG_FIRST_N_EPOCHS", 1)
         if batch_idx % debug_batches_interval == 0 and batch_idx > 0:
-            current_acc = 100. * correct / total
+            current_acc = 100. * correct / total if total > 0 else 0.0
             if training_logger:
                 training_logger.log_batch_progress(
                     batch_idx,
@@ -94,10 +97,10 @@ def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False
 
         pbar.set_postfix({
             'Loss': f'{loss.item():.4f}',
-            'Acc': f'{100.*correct/total:.1f}%'
+            'Acc': f'{100.*correct/total:.1f}%' if total > 0 else 'N/A (no labels)'
         })
 
-    final_acc = 100. * correct / total
+    final_acc = 100. * correct / total if total > 0 else 0.0
     avg_loss = total_loss / len(train_loader)
 
     return avg_loss, final_acc
@@ -125,15 +128,18 @@ def validate_epoch(model, val_loader, criterion, device, use_amp=False, epoch=0)
 
             total_loss += loss.item()
             _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+            
+            # Only count labeled samples (ignore -1 labels for accuracy)
+            valid_mask = labels != -1
+            total += valid_mask.sum().item()
+            correct += ((predicted == labels) & valid_mask).sum().item()
 
             pbar.set_postfix({
                 'Loss': f'{loss.item():.4f}',
-                'Acc': f'{100.*correct/total:.1f}%'
+                'Acc': f'{100.*correct/total:.1f}%' if total > 0 else 'N/A (no labels)'
             })
 
-    final_acc = 100. * correct / total
+    final_acc = 100. * correct / total if total > 0 else 0.0
     avg_loss = total_loss / len(val_loader)
 
     return avg_loss, final_acc

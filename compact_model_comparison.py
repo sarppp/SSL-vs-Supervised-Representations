@@ -65,9 +65,25 @@ def apply_label_hiding_few_shot(train_paths, train_labels, mode='percentage', va
     if mode == 'percentage':
         # Label only X% of data
         n_labeled = int(total_samples * value)
-        labeled_indices = np.random.RandomState(random_state).choice(
-            total_samples, n_labeled, replace=False
-        )
+        
+        # Special case: Allow 0.0 for zero-shot learning (no labeled samples)
+        if value == 0.0:
+            print(f"🚨 ZERO-SHOT MODE: No labeled samples (experimental)")
+        else:
+            # Validate: must have at least 1 labeled sample per class for supervised training
+            min_classes = len(set(train_labels))
+            if n_labeled < min_classes and n_labeled > 0:
+                raise ValueError(f"❌ FEW_SHOT_VALUE too low: {value} results in {n_labeled} labeled samples, "
+                               f"but need at least {min_classes} (1 per class) for training. "
+                               f"Use 0.0 for zero-shot or minimum: {min_classes/total_samples:.4f}")
+        
+        if n_labeled == 0:
+            # Zero-shot: no labeled samples
+            labeled_indices = np.array([], dtype=int)
+        else:
+            labeled_indices = np.random.RandomState(random_state).choice(
+                total_samples, n_labeled, replace=False
+            )
         
     elif mode == 'per_class':
         # Label only X samples per class
@@ -152,9 +168,17 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
     BATCH_SIZE = 16  # Reduced from 32 to help with CUDA memory
     EPOCHS = 5
     NUM_WORKERS = 8
+    
+    # Force override ALL parameters - ensure these take precedence
     active_config.EPOCHS = EPOCHS
     active_config.NUM_WORKERS = NUM_WORKERS
-    active_config.BATCH_SIZE = min(BATCH_SIZE, active_config.BATCH_SIZE)
+    active_config.BATCH_SIZE = BATCH_SIZE  # Force override (removed min() to ensure override)
+    
+    # Debug: Verify all overrides
+    print(f"🔧 Config overrides:")
+    print(f"   EPOCHS = {active_config.EPOCHS}")
+    print(f"   BATCH_SIZE = {active_config.BATCH_SIZE}")
+    print(f"   NUM_WORKERS = {active_config.NUM_WORKERS}")
     # Disable image pre-validation at runtime for faster experiments.  
     # Flip to True if you want to re-run the expensive corruption checks.
     setattr(active_config, 'VALIDATE_IMAGES', False)
@@ -415,10 +439,10 @@ def main():
     # SAMPLE_SIZE = 500                             # Use exactly 500 samples
     
     # 🎯 TRUE FEW-SHOT LEARNING Configuration (LABEL HIDING - not dataset reduction):
-    FEW_SHOT_MODE = None                            # Disable few-shot learning
-    #FEW_SHOT_MODE = 'percentage'                  # Hide labels: only X% of data has labels
+    FEW_SHOT_MODE = 'percentage'                   # Enable zero-shot learning
+    #FEW_SHOT_MODE = None                          # Disable few-shot learning
     # FEW_SHOT_MODE = 'per_class'                   # Hide labels: only X samples per class have labels
-    FEW_SHOT_VALUE = 0.01                           # 10% labeled data OR 5 samples per class
+    FEW_SHOT_VALUE = 0.0                           # 0% labeled data = ZERO-SHOT (no labels at all)
     
     # 💡 TRUE FEW-SHOT means: Model sees ALL images but most labels are hidden (-1)
     # 💡 This is different from dataset reduction (which would show fewer images)
@@ -438,7 +462,7 @@ def main():
     model_types = [
         ('cnn', config.MODEL_NAME),        # config.py → e.g., 'efficientnet_b3'
         ('dinov2', config_dinov2.MODEL_NAME),   # config_dinov2.py → e.g., 'dinov2_vits14'
-        ('vit', config_vit.MODEL_NAME)     # config_vit.py → e.g., 'vit_B'
+        ('vit', config_vit.MODEL_NAME)     # config_vit.py → e.g., 'vit_base_patch16_224'
     ]
     
     # Log experiment start

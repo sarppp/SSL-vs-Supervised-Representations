@@ -20,7 +20,16 @@ def get_model_identifier(model_name=None, config=None):
         variant = model_name.replace('efficientnet_', '')
         base_id = f"cnn_{variant}"
     elif model_name.startswith('vit_'):
-        variant = model_name.replace('vit_', '')
+        if 'tiny' in model_name:
+            variant = 'T'
+        elif 'small' in model_name:
+            variant = 'S'
+        elif 'base' in model_name:
+            variant = 'B'
+        elif 'large' in model_name:
+            variant = 'L'
+        else:
+            variant = model_name.replace('vit_', '').split('_')[0]
         base_id = f"vit_{variant}"
     elif model_name.startswith('resnet'):
         variant = model_name.replace('resnet', '')
@@ -204,7 +213,7 @@ def create_model(num_classes, model_name=None, config=None, setup_logger=None):
                 elif 'large' in model_name:
                     embed_dim = 1024
                 else:
-                    raise ValueError(f"Unknown ViT variant: {model_name}")
+                    raise ValueError(f"Unknown ViT variant: {model_name}. Expected one of: tiny, small, base, large")
             
             # Create classifier head
             classifier = create_improved_classifier(embed_dim, num_classes, "vit", config)

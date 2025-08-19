@@ -111,8 +111,11 @@ class TrainingLogger:
         
         if mode == 'percentage':
             self.logger.info(f"   💡 Using {value*100:.1f}% of labeled training data")
-            estimated_total = int(total_train_samples / value)
-            self.logger.info(f"   🖼️ Estimated total available images: ~{estimated_total}")
+            if value > 0:
+                estimated_total = int(total_train_samples / value)
+                self.logger.info(f"   🖼️ Estimated total available images: ~{estimated_total}")
+            else:
+                self.logger.info(f"   🚨 ZERO-SHOT MODE: No labeled samples for training")
         elif mode == 'per_class':
             self.logger.info(f"   💡 Using {value} labeled samples per class")
         
@@ -475,8 +478,8 @@ class EvaluationLogger:
             true_count = true_counts.get(i, 0)
             pred_count = pred_counts.get(i, 0)
             
-            true_pct = (true_count / total_true) * 100
-            pred_pct = (pred_count / total_pred) * 100
+            true_pct = (true_count / total_true) * 100 if total_true > 0 else 0
+            pred_pct = (pred_count / total_pred) * 100 if total_pred > 0 else 0
             difference = pred_pct - true_pct
             
             status = ""

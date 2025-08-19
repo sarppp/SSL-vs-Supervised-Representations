@@ -39,11 +39,10 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
     # Apply few-shot adjustments if enabled
     few_shot_mode = getattr(config_module, 'FEW_SHOT_MODE', None)
     if few_shot_mode is not None:
-        # Adjust epochs for few-shot learning
-        original_epochs = getattr(config_module, 'EPOCHS', 15)
-        setattr(config_module, 'EPOCHS', min(50, original_epochs * 2))  # Increase epochs but cap at 50
+        # NOTE: Epochs are now controlled by compact_model_comparison.py
+        # No automatic doubling - respect the override from compact script
         
-        # Adjust early stopping patience
+        # Adjust early stopping patience only
         early_stopping_patience = getattr(config_module, 'EARLY_STOPPING_PATIENCE', 3)
         setattr(config_module, 'EARLY_STOPPING_PATIENCE', max(10, early_stopping_patience * 2))
     
@@ -69,17 +68,9 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
     # Log training start
     training_logger.log_training_start(config_dict, total_samples)
     
-    # Apply few-shot adjustments if enabled in config
+    # Log few-shot configuration if enabled
     few_shot_mode = getattr(config_module, 'FEW_SHOT_MODE', None)
     if few_shot_mode is not None:
-        # Adjust epochs for few-shot learning
-        original_epochs = getattr(config_module, 'EPOCHS', 15)
-        setattr(config_module, 'EPOCHS', min(50, original_epochs * 2))  # Increase epochs but cap at 50
-        
-        # Adjust early stopping patience
-        early_stopping_patience = getattr(config_module, 'EARLY_STOPPING_PATIENCE', 3)
-        setattr(config_module, 'EARLY_STOPPING_PATIENCE', max(10, early_stopping_patience * 2))
-        
         # Log few-shot configuration
         total_train_samples = len(train_loader.dataset)
         training_logger.log_few_shot_info(

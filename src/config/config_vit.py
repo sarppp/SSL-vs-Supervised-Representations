@@ -26,12 +26,12 @@ RANDOM_STATE = 42
 
 # Model Configuration
 AVAILABLE_MODELS = [
-    'vit_B',    # ViT Base 16x16 patches
-    'vit_S',   # ViT Small 16x16 patches
-    'vit_L',   # ViT Large 16x16 patches
-    'vit_T',    # ViT Tiny 16x16 patches
+    'vit_base_patch16_224',    # ViT Base 16x16 patches
+    'vit_small_patch16_224',   # ViT Small 16x16 patches
+    'vit_large_patch16_224',   # ViT Large 16x16 patches
+    'vit_tiny_patch16_224',    # ViT Tiny 16x16 patches
 ]
-MODEL_NAME = 'vit_B'  # Default model
+MODEL_NAME = 'vit_base_patch16_224'  # Default model
 
 # ViT-specific Training Configuration
 LEARNING_RATE = 0.001
@@ -43,22 +43,22 @@ DROPOUT = 0.1
 
 # Model-specific configurations
 MODEL_CONFIGS = {
-    'vit_T': {
+    'vit_tiny_patch16_224': {
         'learning_rate': 0.001,
         'weight_decay': 0.01,
         'dropout': 0.1
     },
-    'vit_S': {
+    'vit_small_patch16_224': {
         'learning_rate': 0.001,
         'weight_decay': 0.01,
         'dropout': 0.1
     },
-    'vit_B': {
+    'vit_base_patch16_224': {
         'learning_rate': 0.0008,
         'weight_decay': 0.01,
         'dropout': 0.1
     },
-    'vit_L': {
+    'vit_large_patch16_224': {
         'learning_rate': 0.0005,
         'weight_decay': 0.015,
         'dropout': 0.15

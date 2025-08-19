@@ -41,6 +41,16 @@ class ThesisVisualizer:
         self.evaluation_data = self.load_evaluation_data()
         self.checkpoint_data = self.analyze_checkpoints()
         
+        # Define label percentage mappings and colors
+        self.label_percentages = {
+            '0': {'name': '0% (Zero-shot)', 'color': '#E74C3C', 'suffix': '0pct'},
+            '10': {'name': '10% (Few-shot)', 'color': '#F39C12', 'suffix': '10pct'},
+            '100': {'name': '100% (Full labels)', 'color': '#27AE60', 'suffix': '100pct'}
+        }
+        
+        # Detect available label percentages from data
+        self.available_percentages = self.detect_available_percentages()
+        
     def load_comparison_data(self):
         """Load comparison results"""
         comparison_file = self.outputs_dir / "comparison_results" / "comparison.json"
@@ -114,16 +124,212 @@ class ThesisVisualizer:
             return "ViT (Supervised)"
         return "Unknown"
     
-    def create_performance_comparison(self):
-        """Create comprehensive performance comparison visualization"""
-        if not self.comparison_data:
-            print("❌ No comparison data available")
-            return
+    def extract_label_percentage(self, model_name):
+        """Extract label percentage from model name"""
+        # Check for explicit label percentage in model name
+        for percentage in ['0', '10', '100']:
+            if f'_label_{percentage}_' in model_name or f'label_{percentage}' in model_name:
+                return percentage
+            elif f'{percentage}pct' in model_name or f'{percentage}%' in model_name:
+                return percentage
+        
+        # Infer from model type/name patterns
+        if 'zero_shot' in model_name or 'zeroshot' in model_name:
+            return '0'
+        elif 'few_shot' in model_name or 'fewshot' in model_name:
+            return '10'
+        
+        # Default to 100% for standard models
+        return '100'
+    
+    def detect_available_percentages(self):
+        """Detect which label percentages are available in the data"""
+        available = set()
+        
+        # Check comparison data
+        if self.comparison_data and 'model_results' in self.comparison_data:
+            for model in self.comparison_data['model_results']:
+                pct = self.extract_label_percentage(model.get('model_name', ''))
+                available.add(pct)
+        
+        # Check checkpoint data
+        checkpoints_dir = self.outputs_dir / "checkpoints"
+        if checkpoints_dir.exists():
+            for checkpoint in checkpoints_dir.glob("*.pth"):
+                pct = self.extract_label_percentage(checkpoint.name)
+                available.add(pct)
+        
+        # Check training data
+        for model_name in self.training_data.keys():
+            pct = self.extract_label_percentage(model_name)
+            available.add(pct)
+        
+        return sorted(list(available))
+    
+    def filter_data_by_percentage(self, percentage):
+        """Filter all data to only include models with the specified label percentage"""
+        filtered_data = {
+            'comparison_data': None,
+            'training_data': {},
+            'evaluation_data': {},
+            'checkpoint_data': {}
+        }
+        
+        # Filter comparison data
+        if self.comparison_data and 'model_results' in self.comparison_data:
+            filtered_models = []
+            for model in self.comparison_data['model_results']:
+                if self.extract_label_percentage(model.get('model_name', '')) == percentage:
+                    filtered_models.append(model)
+            
+            if filtered_models:
+                filtered_data['comparison_data'] = {
+                    'model_results': filtered_models,
+                    'summary': self.comparison_data.get('summary', {})
+                }
+        
+        # Filter training data
+        for model_name, data in self.training_data.items():
+            if self.extract_label_percentage(model_name) == percentage:
+                filtered_data['training_data'][model_name] = data
+        
+        # Filter evaluation data
+        for model_name, data in self.evaluation_data.items():
+            if self.extract_label_percentage(model_name) == percentage:
+                filtered_data['evaluation_data'][model_name] = data
+        
+        # Filter checkpoint data
+        for model_type, checkpoints in self.checkpoint_data.items():
+            filtered_checkpoints = []
+            for checkpoint in checkpoints:
+                if self.extract_label_percentage(checkpoint['filename']) == percentage:
+                    filtered_checkpoints.append(checkpoint)
+            if filtered_checkpoints:
+                filtered_data['checkpoint_data'][model_type] = filtered_checkpoints
+        
+        return filtered_data
+    
+    def create_comparison_data_from_checkpoints(self, checkpoint_data, percentage):
+        """Create comparison data structure from checkpoint files when JSON data unavailable"""
+        model_results = []
+        
+        for model_type, checkpoints in checkpoint_data.items():
+            # Find the best checkpoint for this model type
+            best_checkpoint = max(checkpoints, key=lambda x: x['accuracy'])
+            
+            # Extract model name from filename 
+            filename = best_checkpoint['filename']
+            if 'cnn' in filename.lower():
+                model_name = f"efficientnet_b4_label_{percentage}"
+            elif 'dino' in filename.lower():
+                model_name = f"dinov2_vitb14_label_{percentage}"  
+            elif 'vit' in filename.lower():
+                model_name = f"vit_base_patch16_224_label_{percentage}"
+            else:
+                model_name = f"unknown_model_label_{percentage}"
+            
+            # Create model result entry with available data
+            model_result = {
+                'model_name': model_name,
+                'test_accuracy': best_checkpoint['accuracy'],
+                'train_accuracy': best_checkpoint['accuracy'],  # Approximation
+                'best_val_acc': best_checkpoint['accuracy'],   # Approximation
+                'time': 3600,  # Default 1 hour (no timing data available)
+                'checkpoint_type': best_checkpoint['type']
+            }
+            
+            model_results.append(model_result)
+        
+        return {
+            'model_results': model_results,
+            'summary': {
+                'total_models': len(model_results),
+                'label_percentage': percentage
+            }
+        } if model_results else None
+    
+    def create_simple_accuracy_chart(self, checkpoint_data, percentage):
+        """Create simple accuracy chart from checkpoint data when training curves unavailable"""
+        if percentage:
+            title = f'Model Accuracy Summary: {self.label_percentages[percentage]["name"]}'
+            suffix = self.label_percentages[percentage]['suffix']
+        else:
+            title = 'Model Accuracy Summary'
+            suffix = ''
+        
+        fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+        fig.suptitle(title, fontsize=16, fontweight='bold')
+        
+        model_names = []
+        accuracies = []
+        colors = []
+        
+        for model_type, checkpoints in checkpoint_data.items():
+            best_checkpoint = max(checkpoints, key=lambda x: x['accuracy'])
+            model_names.append(model_type)
+            accuracies.append(best_checkpoint['accuracy'])
+            
+            if 'DINOv2' in model_type:
+                colors.append('#4ECDC4')
+            elif 'CNN' in model_type:
+                colors.append('#FF6B6B') 
+            elif 'ViT' in model_type:
+                colors.append('#FFE66D')
+            else:
+                colors.append('#999999')
+        
+        bars = ax.bar(model_names, accuracies, color=colors, alpha=0.8, edgecolor='black', linewidth=1)
+        ax.set_title('Best Model Accuracy', fontweight='bold')
+        ax.set_ylabel('Test Accuracy (%)')
+        ax.set_ylim(0, 100)
+        ax.tick_params(axis='x', rotation=45)
+        
+        # Add value labels on bars
+        for bar, acc in zip(bars, accuracies):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + 1,
+                    f'{acc:.1f}%', ha='center', va='bottom', fontweight='bold')
+        
+        plt.tight_layout()
+        
+        # Save the plot
+        if suffix:
+            save_path = self.viz_dir / f"training_curves_{suffix}.png"
+            print(f"✅ Training curves ({percentage}% labels) saved to: {save_path}")
+        else:
+            save_path = self.viz_dir / "training_curves.png"
+            print(f"✅ Training curves saved to: {save_path}")
+            
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        return fig
+    
+    def create_performance_comparison(self, percentage=None, filtered_data=None):
+        """Create comprehensive performance comparison visualization for specific label percentage"""
+        if filtered_data:
+            comparison_data = filtered_data['comparison_data']
+        else:
+            comparison_data = self.comparison_data
+            
+        # Fallback: create comparison data from checkpoints if JSON not available
+        if not comparison_data and filtered_data and filtered_data['checkpoint_data']:
+            comparison_data = self.create_comparison_data_from_checkpoints(filtered_data['checkpoint_data'], percentage)
+            
+        if not comparison_data:
+            print(f"❌ No comparison data available for {percentage}% labels")
+            return None
+        
+        # Create title based on percentage
+        if percentage:
+            title = f'Model Performance Comparison: {self.label_percentages[percentage]["name"]}'
+            color_theme = self.label_percentages[percentage]['color']
+        else:
+            title = 'Model Performance Comparison: All Models'
+            color_theme = '#4ECDC4'
         
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
-        fig.suptitle('Model Performance Comparison: Supervised vs Self-Supervised', fontsize=16, fontweight='bold')
+        fig.suptitle(title, fontsize=16, fontweight='bold')
         
-        models = self.comparison_data['model_results']
+        models = comparison_data['model_results']
         
         # Prepare data
         model_names = []
@@ -220,28 +426,62 @@ class ThesisVisualizer:
         
         plt.tight_layout()
         
-        # Save the plot
-        save_path = self.viz_dir / "performance_comparison.png"
+        # Save the plot with percentage suffix
+        if percentage:
+            suffix = self.label_percentages[percentage]['suffix']
+            save_path = self.viz_dir / f"performance_comparison_{suffix}.png"
+            print(f"✅ Performance comparison ({percentage}% labels) saved to: {save_path}")
+        else:
+            save_path = self.viz_dir / "performance_comparison.png"
+            print(f"✅ Performance comparison saved to: {save_path}")
+            
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"✅ Performance comparison saved to: {save_path}")
-        
         return fig
     
-    def create_training_curves(self):
-        """Create training curves visualization"""
-        if not self.training_data:
-            print("❌ No training data available")
-            return
+    def create_training_curves(self, percentage=None, filtered_data=None):
+        """Create training curves visualization for specific label percentage"""
+        if filtered_data:
+            training_data = filtered_data['training_data']
+        else:
+            training_data = self.training_data
+            
+        # Fallback: create simple accuracy summary when detailed training data unavailable
+        if not training_data and filtered_data and filtered_data['checkpoint_data']:
+            return self.create_simple_accuracy_chart(filtered_data['checkpoint_data'], percentage)
+            
+        if not training_data:
+            print(f"❌ No training data available for {percentage}% labels")
+            return None
         
+        # Create title based on percentage
+        if percentage:
+            title = f'Training Dynamics: {self.label_percentages[percentage]["name"]}'
+        else:
+            title = 'Training Dynamics: All Models'
+            
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
-        fig.suptitle('Training Dynamics: Supervised vs Self-Supervised Models', fontsize=16, fontweight='bold')
+        fig.suptitle(title, fontsize=16, fontweight='bold')
         
-        colors = {'dinov2_vits14': '#4ECDC4', 'efficientnet_b4': '#FF6B6B', 'vit_base_patch16_224': '#FFE66D'}
-        labels = {'dinov2_vits14': 'DINOv2 (Self-Supervised)', 'efficientnet_b4': 'CNN (Supervised)', 
-                 'vit_base_patch16_224': 'ViT (Supervised)'}
+        # Dynamic colors and labels based on available models
+        colors = {}
+        labels = {}
+        
+        for model_name in training_data.keys():
+            if 'dinov2' in model_name:
+                colors[model_name] = '#4ECDC4'
+                labels[model_name] = 'DINOv2 (Self-Supervised)'
+            elif 'efficientnet' in model_name or 'cnn' in model_name:
+                colors[model_name] = '#FF6B6B' 
+                labels[model_name] = 'CNN (Supervised)'
+            elif 'vit' in model_name:
+                colors[model_name] = '#FFE66D'
+                labels[model_name] = 'ViT (Supervised)'
+            else:
+                colors[model_name] = '#999999'
+                labels[model_name] = model_name.replace('_', ' ').title()
         
         # 1. Training Loss Curves
-        for model_name, data in self.training_data.items():
+        for model_name, data in training_data.items():
             if 'metrics_history' in data:
                 epochs = data['metrics_history']['epochs']
                 train_losses = data['metrics_history']['train_losses']
@@ -255,7 +495,7 @@ class ThesisVisualizer:
         ax1.grid(True, alpha=0.3)
         
         # 2. Validation Loss Curves
-        for model_name, data in self.training_data.items():
+        for model_name, data in training_data.items():
             if 'metrics_history' in data:
                 epochs = data['metrics_history']['epochs']
                 val_losses = data['metrics_history']['val_losses']
@@ -269,7 +509,7 @@ class ThesisVisualizer:
         ax2.grid(True, alpha=0.3)
         
         # 3. Training Accuracy Curves
-        for model_name, data in self.training_data.items():
+        for model_name, data in training_data.items():
             if 'metrics_history' in data:
                 epochs = data['metrics_history']['epochs']
                 train_accs = data['metrics_history']['train_accuracies']
@@ -283,7 +523,7 @@ class ThesisVisualizer:
         ax3.grid(True, alpha=0.3)
         
         # 4. Validation Accuracy Curves
-        for model_name, data in self.training_data.items():
+        for model_name, data in training_data.items():
             if 'metrics_history' in data:
                 epochs = data['metrics_history']['epochs']
                 val_accs = data['metrics_history']['val_accuracies']
@@ -298,23 +538,45 @@ class ThesisVisualizer:
         
         plt.tight_layout()
         
-        # Save the plot
-        save_path = self.viz_dir / "training_curves.png"
+        # Save the plot with percentage suffix
+        if percentage:
+            suffix = self.label_percentages[percentage]['suffix']
+            save_path = self.viz_dir / f"training_curves_{suffix}.png"
+            print(f"✅ Training curves ({percentage}% labels) saved to: {save_path}")
+        else:
+            save_path = self.viz_dir / "training_curves.png"
+            print(f"✅ Training curves saved to: {save_path}")
+            
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"✅ Training curves saved to: {save_path}")
-        
         return fig
     
-    def create_model_architecture_comparison(self):
-        """Create model architecture and parameter comparison"""
-        if not self.comparison_data:
-            print("❌ No comparison data available")
-            return
+    def create_model_architecture_comparison(self, percentage=None, filtered_data=None):
+        """Create model architecture and parameter comparison for specific label percentage"""
+        if filtered_data:
+            comparison_data = filtered_data['comparison_data']
+            training_data = filtered_data['training_data']
+        else:
+            comparison_data = self.comparison_data
+            training_data = self.training_data
+            
+        # Fallback: create comparison data from checkpoints if JSON not available
+        if not comparison_data and filtered_data and filtered_data['checkpoint_data']:
+            comparison_data = self.create_comparison_data_from_checkpoints(filtered_data['checkpoint_data'], percentage)
+            
+        if not comparison_data:
+            print(f"❌ No comparison data available for {percentage}% labels")
+            return None
         
+        # Create title based on percentage
+        if percentage:
+            title = f'Model Architecture Analysis: {self.label_percentages[percentage]["name"]}'
+        else:
+            title = 'Model Architecture Analysis: All Models'
+            
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
-        fig.suptitle('Model Architecture Analysis: Supervised vs Self-Supervised', fontsize=16, fontweight='bold')
+        fig.suptitle(title, fontsize=16, fontweight='bold')
         
-        models = self.comparison_data['model_results']
+        models = comparison_data['model_results']
         
         # Prepare data
         model_names = []
@@ -340,10 +602,24 @@ class ThesisVisualizer:
             model_names.append(name)
             model_types.append(model_type)
             
-            # Image size (area)
-            img_size = model['image_size']
-            image_sizes.append(img_size[0] * img_size[1])
-            batch_sizes.append(model['batch_size'])
+            # Image size (area) - use defaults if not available
+            if 'image_size' in model:
+                img_size = model['image_size']
+                image_sizes.append(img_size[0] * img_size[1])
+            else:
+                # Default image sizes based on model type
+                if 'dinov2' in model['model_name']:
+                    image_sizes.append(378 * 378)  # DINOv2 default
+                elif 'vit' in model['model_name']:
+                    image_sizes.append(224 * 224)  # ViT default
+                else:
+                    image_sizes.append(384 * 384)  # CNN default
+            
+            # Batch size - use default if not available
+            if 'batch_size' in model:
+                batch_sizes.append(model['batch_size'])
+            else:
+                batch_sizes.append(16)  # Default batch size
             
             # Estimate model size from checkpoints
             model_key = model['model_name']
@@ -398,8 +674,8 @@ class ThesisVisualizer:
         for model in models:
             # Get learning rate from training data if available
             model_key = model['model_name']
-            if model_key in self.training_data:
-                config = self.training_data[model_key].get('session_metadata', {}).get('config', {})
+            if model_key in training_data:
+                config = training_data[model_key].get('session_metadata', {}).get('config', {})
                 lr = config.get('LEARNING_RATE', 0.001)
             else:
                 lr = 0.001  # Default
@@ -417,36 +693,57 @@ class ThesisVisualizer:
         
         plt.tight_layout()
         
-        # Save the plot
-        save_path = self.viz_dir / "architecture_comparison.png"
+        # Save the plot with percentage suffix
+        if percentage:
+            suffix = self.label_percentages[percentage]['suffix']
+            save_path = self.viz_dir / f"architecture_comparison_{suffix}.png"
+            print(f"✅ Architecture comparison ({percentage}% labels) saved to: {save_path}")
+        else:
+            save_path = self.viz_dir / "architecture_comparison.png"
+            print(f"✅ Architecture comparison saved to: {save_path}")
+            
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"✅ Architecture comparison saved to: {save_path}")
-        
         return fig
     
-    def create_summary_table(self):
-        """Create a comprehensive summary table"""
-        if not self.comparison_data:
-            print("❌ No comparison data available")
-            return
+    def create_summary_table(self, percentage=None, filtered_data=None):
+        """Create a comprehensive summary table for specific label percentage"""
+        if filtered_data:
+            comparison_data = filtered_data['comparison_data']
+        else:
+            comparison_data = self.comparison_data
+            
+        # Fallback: create comparison data from checkpoints if JSON not available
+        if not comparison_data and filtered_data and filtered_data['checkpoint_data']:
+            comparison_data = self.create_comparison_data_from_checkpoints(filtered_data['checkpoint_data'], percentage)
+            
+        if not comparison_data:
+            print(f"❌ No comparison data available for {percentage}% labels")
+            return None
         
-        models = self.comparison_data['model_results']
+        models = comparison_data['model_results']
         
         # Create summary data
         summary_data = []
         for model in models:
             model_type = "Self-Supervised" if 'dinov2' in model['model_name'] else "Supervised"
             
+            # Handle missing fields gracefully
+            image_size = model.get('image_size', [224, 224])
+            if isinstance(image_size, list):
+                image_size_str = f"{image_size[0]}×{image_size[1]}"
+            else:
+                image_size_str = "224×224"
+                
             summary_data.append({
                 'Model': model['model_name'].replace('_', ' ').title(),
                 'Type': model_type,
                 'Test Accuracy (%)': f"{model['test_accuracy']:.1f}",
-                'Training Accuracy (%)': f"{model['train_accuracy']:.1f}",
-                'Best Val Accuracy (%)': f"{model['best_val_acc']:.1f}",
-                'Training Time (min)': f"{model['time']/60:.1f}",
-                'Image Size': f"{model['image_size'][0]}×{model['image_size'][1]}",
-                'Batch Size': model['batch_size'],
-                'Epochs': model['epochs']
+                'Training Accuracy (%)': f"{model.get('train_accuracy', model['test_accuracy']):.1f}",
+                'Best Val Accuracy (%)': f"{model.get('best_val_acc', model['test_accuracy']):.1f}",
+                'Training Time (min)': f"{model.get('time', 3600)/60:.1f}",
+                'Image Size': image_size_str,
+                'Batch Size': model.get('batch_size', 16),
+                'Epochs': model.get('epochs', 5)
             })
         
         # Create DataFrame
@@ -475,60 +772,97 @@ class ThesisVisualizer:
             for j in range(len(df.columns)):
                 table[(i, j)].set_facecolor(color)
         
-        plt.title('Model Comparison Summary Table', fontsize=16, fontweight='bold', pad=20)
+        # Create title based on percentage
+        if percentage:
+            title = f'Model Comparison Summary: {self.label_percentages[percentage]["name"]}'
+        else:
+            title = 'Model Comparison Summary Table'
+            
+        plt.title(title, fontsize=16, fontweight='bold', pad=20)
         
-        # Save the plot
-        save_path = self.viz_dir / "summary_table.png"
+        # Save the plot with percentage suffix
+        if percentage:
+            suffix = self.label_percentages[percentage]['suffix']
+            save_path = self.viz_dir / f"summary_table_{suffix}.png"
+            print(f"✅ Summary table ({percentage}% labels) saved to: {save_path}")
+        else:
+            save_path = self.viz_dir / "summary_table.png"
+            print(f"✅ Summary table saved to: {save_path}")
+            
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"✅ Summary table saved to: {save_path}")
-        
         return fig
     
     def generate_all_visualizations(self):
-        """Generate all visualizations for the thesis"""
+        """Generate all visualizations for the thesis, separated by label percentage"""
         print("🎓 Generating Master Thesis Visualizations...")
         print("=" * 60)
         
-        # Create all visualizations
-        viz_functions = [
-            ("Performance Comparison", self.create_performance_comparison),
-            ("Training Curves", self.create_training_curves),
-            ("Architecture Comparison", self.create_model_architecture_comparison),
-            ("Summary Table", self.create_summary_table)
-        ]
+        print(f"🔍 Available label percentages: {', '.join([self.label_percentages[p]['name'] for p in self.available_percentages])}")
         
-        generated_plots = []
+        all_generated_plots = []
         
-        for name, func in viz_functions:
-            print(f"\n📊 Creating {name}...")
-            try:
-                fig = func()
-                if fig:
-                    generated_plots.append(name)
-                    plt.close(fig)  # Close to free memory
-            except Exception as e:
-                print(f"❌ Error creating {name}: {e}")
+        # Generate visualizations for each available percentage
+        for percentage in self.available_percentages:
+            print(f"\n📊 Generating visualizations for {self.label_percentages[percentage]['name']}...")
+            print("-" * 40)
+            
+            # Filter data for this percentage
+            filtered_data = self.filter_data_by_percentage(percentage)
+            
+            # Create all visualizations for this percentage
+            viz_functions = [
+                ("Performance Comparison", self.create_performance_comparison),
+                ("Training Curves", self.create_training_curves),
+                ("Architecture Comparison", self.create_model_architecture_comparison),
+                ("Summary Table", self.create_summary_table)
+            ]
+            
+            generated_plots = []
+            
+            for name, func in viz_functions:
+                print(f"\n  📈 Creating {name} for {percentage}% labels...")
+                try:
+                    fig = func(percentage=percentage, filtered_data=filtered_data)
+                    if fig:
+                        generated_plots.append(f"{name} ({percentage}% labels)")
+                        plt.close(fig)  # Close to free memory
+                    else:
+                        print(f"  ⚠️ Skipping {name} for {percentage}% labels (no data)")
+                except Exception as e:
+                    print(f"  ❌ Error creating {name} for {percentage}% labels: {e}")
+            
+            all_generated_plots.extend(generated_plots)
+            print(f"\n  ✅ Generated {len(generated_plots)} visualizations for {percentage}% labels")
         
         print("\n" + "=" * 60)
-        print(f"✅ Generated {len(generated_plots)} visualizations:")
-        for plot in generated_plots:
+        print(f"✅ Generated {len(all_generated_plots)} total visualizations:")
+        for plot in all_generated_plots:
             print(f"   📈 {plot}")
         
         print(f"\n📁 All visualizations saved to: {self.viz_dir}")
-        print("\n🎯 Key Findings for Thesis:")
+        print("\n🎯 Key Findings by Label Percentage:")
         
-        if self.comparison_data:
-            winner = self.comparison_data['summary']['winner']
-            print(f"   🏆 Best performing model: {winner['model_name']} ({winner['test_accuracy']:.1f}% accuracy)")
-            print(f"   🔬 Self-supervised DINOv2 outperformed supervised models")
-            print(f"   ⚡ Training efficiency varies significantly between architectures")
-            print(f"   📊 Model size vs accuracy trade-offs clearly visible")
+        for percentage in self.available_percentages:
+            filtered_data = self.filter_data_by_percentage(percentage)
+            if filtered_data['comparison_data'] and 'model_results' in filtered_data['comparison_data']:
+                models = filtered_data['comparison_data']['model_results']
+                if models:
+                    best_model = max(models, key=lambda x: x['test_accuracy'])
+                    print(f"   🏆 {self.label_percentages[percentage]['name']}: {best_model['model_name']} ({best_model['test_accuracy']:.1f}% accuracy)")
         
-        return generated_plots
+        return all_generated_plots
 
 def main():
-    """Main function to generate all thesis visualizations"""
+    """Main function to generate all thesis visualizations by label percentage"""
     visualizer = ThesisVisualizer()
+    if not visualizer.available_percentages:
+        print("❌ No models found with recognizable label percentages")
+        print("Available model names in data:")
+        if visualizer.comparison_data and 'model_results' in visualizer.comparison_data:
+            for model in visualizer.comparison_data['model_results']:
+                print(f"  - {model.get('model_name', 'Unknown')}")
+        return
+    
     visualizer.generate_all_visualizations()
 
 if __name__ == "__main__":

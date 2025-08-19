@@ -10,16 +10,35 @@ def calculate_class_weights(train_labels, class_names):
     # Convert all labels to strings to handle mixed int/string labels
     string_train_labels = [str(label) for label in train_labels]
     
-    # Calculate class weights
-    unique_labels = sorted(list(set(string_train_labels)))
+    # Check for zero-shot case (all labels are -1)
+    valid_labels = [label for label in string_train_labels if label != '-1']
+    
+    if not valid_labels:
+        print(f"🚨 ZERO-SHOT MODE: No valid labels found, using uniform weights")
+        # Return uniform weights for all classes
+        uniform_weights = [1.0] * len(class_names)
+        class_weights_tensor = torch.FloatTensor(uniform_weights)
+        print(f"✅ Uniform class weights applied: {uniform_weights[0]:.3f} for all {len(class_names)} classes")
+        return class_weights_tensor
+    
+    # Calculate class weights for valid labels only
+    unique_labels = sorted(list(set(valid_labels)))
     unique_labels_array = np.array(unique_labels)
-    train_labels_array = np.array(string_train_labels)
+    valid_labels_array = np.array(valid_labels)
 
-    class_weights = compute_class_weight('balanced', classes=unique_labels_array, y=train_labels_array)
+    class_weights = compute_class_weight('balanced', classes=unique_labels_array, y=valid_labels_array)
     class_weights_dict = dict(zip(unique_labels, class_weights))
 
     # Convert to tensor - order must match class_to_idx
-    ordered_weights = [class_weights_dict[class_name] for class_name in class_names]
+    ordered_weights = []
+    for class_name in class_names:
+        if str(class_name) in class_weights_dict:
+            ordered_weights.append(class_weights_dict[str(class_name)])
+        else:
+            # If class not in labeled data, use average weight
+            avg_weight = np.mean(class_weights) if len(class_weights) > 0 else 1.0
+            ordered_weights.append(avg_weight)
+    
     class_weights_tensor = torch.FloatTensor(ordered_weights)
 
     print(f"✅ Class weights calculated:")
