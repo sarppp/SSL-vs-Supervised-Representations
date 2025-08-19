@@ -30,7 +30,7 @@ AVAILABLE_MODELS = [
     'dinov2_vitb14',  # DINOv2 base (768 dim)
     'dinov2_vitl14',  # DINOv2 large (1024 dim)
 ]
-MODEL_NAME = 'dinov2_vits14'  # Default to base model
+MODEL_NAME = 'dinov2_vitb14'  # Default to base model
 
 # DINOv2-specific Training Configuration
 LEARNING_RATE = 0.001   # Higher LR for fine-tuning (was too low at 0.0001)
