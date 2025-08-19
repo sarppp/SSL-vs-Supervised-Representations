@@ -1,7 +1,7 @@
 import logging
 import os
 import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from pathlib import Path
 import json
 import numpy as np
@@ -256,8 +256,6 @@ class TrainingLogger:
     def log_file_deleted(self, filename: str):
         """Log successful file deletion."""
         self.logger.info(f"🗑️ Deleted: {filename}")
-
-    def log_file_deletion_error(self, filepath: str, error: str):
         """Log file deletion error."""
         self.logger.error(f"❌ Failed to delete {filepath}: {error}")
 
@@ -266,7 +264,11 @@ class TrainingLogger:
         prefix = f"{file_type} " if file_type else ""
         self.logger.info(f"✅ Kept {prefix}file: {filename}")
 
-    def log_cleanup(self, deleted_files: List[str], kept_files: List[str]):
+    def log_file_moved(self, filename: str, destination: str):
+        """Log successful file move."""
+        self.logger.info(f"📦 Moved: {filename} → {destination}")
+
+    def log_cleanup(self, deleted_files: List[str], kept_files: List[str], moved_files: List[Tuple[str, str]]):
         """Log checkpoint cleanup (legacy method for backward compatibility)."""
         self.log_cleanup_start()
         for file in deleted_files:
@@ -618,6 +620,10 @@ class ModelSetupLogger:
         else:
             self.logger.info("🔥 Backbone unfrozen from start")
     
+    def log_backbone_frozen(self):
+        """Log backbone frozen status."""
+        self.logger.info("🧊 Backbone frozen (will unfreeze later if specified)")
+    
     def log_gradient_checkpointing(self, enabled: bool, success: bool = True, error: Optional[str] = None):
         """Log gradient checkpointing status."""
         if enabled:
@@ -796,15 +802,15 @@ class ComparisonLogger:
         """Log individual model completion."""
         if result.get('success', False):
             self.logger.info(f"\n✅ {model_type.upper()} TRAINING COMPLETE!")
-            self.logger.info(f"   🎯 Train Accuracy: {result.get('train_accuracy', 0):.2f}%")
             self.logger.info(f"   🎯 Test Accuracy: {result.get('test_accuracy', 0):.2f}%")
             self.logger.info(f"   📈 Best Val: {result.get('best_val_acc', 0):.2f}%")
             self.logger.info(f"   ⏱️  Time: {result.get('time', 0):.1f}s")
-            self.model_results.append(result)
         else:
             self.logger.error(f"\n❌ {model_type.upper()} TRAINING FAILED!")
             self.logger.error(f"   💥 Error: {result.get('error', 'Unknown error')}")
-            self.logger.error(f"   ⏱️  Time: {result.get('time', 0):.1f}s")
+        
+        # Always add result to model_results for proper counting
+        self.model_results.append(result)
     
     def log_gpu_cleanup(self):
         """Log GPU memory cleanup."""

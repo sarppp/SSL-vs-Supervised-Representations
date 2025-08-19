@@ -53,8 +53,8 @@ THESIS_CODES_DIR = SRC_DIR
 def ensure_directories():
     """Create directories if they don't exist."""
     dirs_to_create = [
-        CHECKPOINTS_DIR,
         OUTPUTS_DIR,
+        CHECKPOINTS_DIR,
         LOGS_DIR,
         VISUALIZATIONS_DIR,
         TRAINING_RESULTS_DIR,

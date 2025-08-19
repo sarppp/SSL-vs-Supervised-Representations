@@ -19,6 +19,9 @@ def get_model_identifier(model_name=None, config=None):
     elif model_name.startswith('efficientnet'):
         variant = model_name.replace('efficientnet_', '')
         base_id = f"cnn_{variant}"
+    elif model_name.startswith('vit_'):
+        variant = model_name.replace('vit_', '')
+        base_id = f"vit_{variant}"
     elif model_name.startswith('resnet'):
         variant = model_name.replace('resnet', '')
         base_id = f"cnn_resnet{variant}"
@@ -162,6 +165,95 @@ def create_model(num_classes, model_name=None, config=None, setup_logger=None):
         model.improved_classifier = create_improved_classifier(in_features, num_classes, "cnn", config)
         # Optionally, keep the original fc for compatibility, but forward should use improved_classifier
         # You may need to override the forward method elsewhere to use model.improved_classifier(x)
+    
+    elif model_name.startswith('vit_'):
+        # ViT models support
+        try:
+            import timm
+        except ImportError:
+            raise ImportError("timm library is required for ViT models. Install with: pip install timm")
+        
+        # Use model-specific config if available
+        model_configs = getattr(config, 'MODEL_CONFIGS', {})
+        if model_name in model_configs:
+            model_config = model_configs[model_name]
+            setup_logger.log_model_config(model_name, model_config)
+            # Override config values with model-specific ones
+            config.LEARNING_RATE = model_config['learning_rate']
+            config.WEIGHT_DECAY = model_config['weight_decay']
+            config.DROPOUT = model_config['dropout']
+        
+        try:
+            # Load pre-trained ViT model from timm
+            vit_model = timm.create_model(model_name, pretrained=True, num_classes=0)  # num_classes=0 removes head
+            vit_model.eval()
+            
+            # Get the embedding dimension
+            if hasattr(vit_model, 'embed_dim'):
+                embed_dim = vit_model.embed_dim
+            elif hasattr(vit_model, 'num_features'):
+                embed_dim = vit_model.num_features
+            else:
+                # Default dimensions for common ViT variants
+                if 'tiny' in model_name:
+                    embed_dim = 192
+                elif 'small' in model_name:
+                    embed_dim = 384
+                elif 'base' in model_name:
+                    embed_dim = 768
+                elif 'large' in model_name:
+                    embed_dim = 1024
+                else:
+                    raise ValueError(f"Unknown ViT variant: {model_name}")
+            
+            # Create classifier head
+            classifier = create_improved_classifier(embed_dim, num_classes, "vit", config)
+            
+            # Create wrapper class similar to DINOv2
+            class ViTClassifier(nn.Module):
+                def __init__(self, backbone, classifier, embed_dim):
+                    super().__init__()
+                    self.backbone = backbone
+                    self.classifier = classifier
+                    self.embed_dim = embed_dim
+                    
+                    # Freeze backbone initially if specified
+                    freeze_backbone = getattr(config, 'FREEZE_BACKBONE', False)
+                    if freeze_backbone:
+                        for param in self.backbone.parameters():
+                            param.requires_grad = False
+                        setup_logger.log_backbone_frozen()
+                
+                def forward(self, x):
+                    # Get features from ViT backbone
+                    features = self.backbone(x)
+                    return self.classifier(features)
+                
+                def unfreeze_backbone(self):
+                    """Unfreeze backbone for fine-tuning"""
+                    for param in self.backbone.parameters():
+                        param.requires_grad = True
+                    print("🔥 ViT backbone unfrozen for fine-tuning")
+            
+            model = ViTClassifier(vit_model, classifier, embed_dim)
+            
+            # Enable gradient checkpointing if specified
+            use_checkpointing = getattr(config, 'USE_GRADIENT_CHECKPOINTING', False)
+            if use_checkpointing:
+                try:
+                    # Enable gradient checkpointing for memory efficiency
+                    if hasattr(vit_model, 'set_grad_checkpointing'):
+                        vit_model.set_grad_checkpointing(True)
+                        setup_logger.log_gradient_checkpointing(True, True)
+                    else:
+                        setup_logger.log_gradient_checkpointing(True, False)
+                except Exception as checkpoint_error:
+                    setup_logger.log_gradient_checkpointing(True, False, str(checkpoint_error))
+            
+        except Exception as e:
+            error_msg = f"Error loading ViT model: {e}\nMake sure you have timm installed: pip install timm"
+            setup_logger.log_error(error_msg)
+            raise
     
     elif model_name.startswith('dinov2'):
         # Use model-specific config if available

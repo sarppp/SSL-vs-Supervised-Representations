@@ -72,4 +72,5 @@ comparison_results/
 
 # Explicitly ignore any accidental root-level Docker artefacts
 /Dockerfile
-/docker-compose.yml
+/docker-compose.yml.codeium/
+.codeium/

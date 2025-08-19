@@ -22,6 +22,7 @@ try:
     from src.data import dataloader_setup
     from src.config import config
     from src.config import config_dinov2
+    from src.config import config_vit
     from src.models import model_setup
     from src.training import training
     from src.evaluation import evaluation
@@ -138,13 +139,22 @@ class SimpleConfig:
 def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_value=0.1, comparison_logger=None):
     """Run single model training and return results"""
     # Select config (create a simple config object that can be safely modified)
-    base_config = config_dinov2 if model_type == 'dinov2' else config
+    if model_type == 'dinov2':
+        base_config = config_dinov2
+    elif model_type == 'vit':
+        base_config = config_vit
+    else:
+        base_config = config
     active_config = SimpleConfig(base_config)
     model_name = active_config.MODEL_NAME
     
     # Quick config overrides for fast testing
-    active_config.EPOCHS = 20
-    active_config.BATCH_SIZE = min(64, active_config.BATCH_SIZE)
+    BATCH_SIZE = 16  # Reduced from 32 to help with CUDA memory
+    EPOCHS = 5
+    NUM_WORKERS = 8
+    active_config.EPOCHS = EPOCHS
+    active_config.NUM_WORKERS = NUM_WORKERS
+    active_config.BATCH_SIZE = min(BATCH_SIZE, active_config.BATCH_SIZE)
     # Disable image pre-validation at runtime for faster experiments.  
     # Flip to True if you want to re-run the expensive corruption checks.
     setattr(active_config, 'VALIDATE_IMAGES', False)
@@ -164,6 +174,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         config_info = {
             'epochs': active_config.EPOCHS,
             'batch_size': active_config.BATCH_SIZE,
+            'num_workers': active_config.NUM_WORKERS,
             'image_size': active_config.IMAGE_SIZE,
             'learning_rate': active_config.LEARNING_RATE,
             'validate_images': getattr(active_config, 'VALIDATE_IMAGES', False),
@@ -399,7 +410,7 @@ def main():
     
     # 📊 DATASET SIZE Configuration:
     #SAMPLE_SIZE = int(total_dataset_size * 0.1)     # ✅ CURRENTLY ACTIVE: Use 10% of dataset  
-    SAMPLE_SIZE = None                            # Use full dataset (~25K samples)
+    SAMPLE_SIZE = 10000                            # Use full dataset (~25K samples)
     # SAMPLE_SIZE = int(total_dataset_size * 0.01)  # Use 1% of dataset
     # SAMPLE_SIZE = 500                             # Use exactly 500 samples
     
@@ -426,7 +437,8 @@ def main():
     # 🤖 MODEL SELECTION (these are just type labels, real names come from configs)
     model_types = [
         ('cnn', config.MODEL_NAME),        # config.py → e.g., 'efficientnet_b3'
-        ('dinov2', config_dinov2.MODEL_NAME)   # config_dinov2.py → e.g., 'dinov2_vits14'
+        ('dinov2', config_dinov2.MODEL_NAME),   # config_dinov2.py → e.g., 'dinov2_vits14'
+        ('vit', config_vit.MODEL_NAME)     # config_vit.py → e.g., 'vit_B'
     ]
     
     # Log experiment start

@@ -175,29 +175,37 @@ def save_checkpoint(model, optimizer, epoch, train_loss, val_loss, val_acc, file
 
 
 def cleanup_checkpoint_files(timestamp, model_name, keep_best=True, keep_final=True, config_module=None, training_logger=None):
-    """Clean up intermediate checkpoint files, keeping only the best and/or final models."""
+    """Move intermediate checkpoint files to outputs/checkpoints and clean up models folder."""
     if training_logger:
         training_logger.log_cleanup_start()
     
     # Import here to avoid circular imports
     from ..models.model_setup import get_model_identifier
+    from ..config import config_paths
+    import shutil
+    
     model_id = get_model_identifier(model_name, config_module)
 
     save_dir = getattr(config_module, "SAVE_DIR", None)
     if save_dir is None:
         raise AttributeError("The config_module does not have a SAVE_DIR attribute.")
+    
+    # Ensure checkpoints directory exists
+    os.makedirs(config_paths.CHECKPOINTS_DIR, exist_ok=True)
         
     # Build glob patterns without timestamps
     checkpoint_pattern = os.path.join(save_dir, f"checkpoint_*_{model_id}_*.pth")
     best_pattern = os.path.join(save_dir, f"best_{model_id}_*.pth")
     final_pattern = os.path.join(save_dir, f"final_{model_id}_*.pth")
 
-    # Delete all intermediate checkpoints
+    # Move intermediate checkpoints to outputs/checkpoints instead of deleting
     for file_path in glob.glob(checkpoint_pattern):
         try:
-            os.remove(file_path)
+            filename = os.path.basename(file_path)
+            dest_path = os.path.join(config_paths.CHECKPOINTS_DIR, filename)
+            shutil.move(file_path, dest_path)
             if training_logger:
-                training_logger.log_file_deleted(os.path.basename(file_path))
+                training_logger.log_file_moved(filename, "outputs/checkpoints")
         except Exception as e:
             if training_logger:
                 training_logger.log_file_deletion_error(file_path, str(e))
@@ -219,9 +227,12 @@ def cleanup_checkpoint_files(timestamp, model_name, keep_best=True, keep_final=T
         for f in best_files:
             if f != best_file:
                 try:
-                    os.remove(f)
+                    # Move old best files to checkpoints instead of deleting
+                    filename = os.path.basename(f)
+                    dest_path = os.path.join(config_paths.CHECKPOINTS_DIR, filename)
+                    shutil.move(f, dest_path)
                     if training_logger:
-                        training_logger.log_file_deleted(f"old best: {os.path.basename(f)}")
+                        training_logger.log_file_moved(f"old best: {filename}", "outputs/checkpoints")
                 except Exception as e:
                     if training_logger:
                         training_logger.log_file_deletion_error(f, str(e))
@@ -229,12 +240,14 @@ def cleanup_checkpoint_files(timestamp, model_name, keep_best=True, keep_final=T
             if training_logger:
                 training_logger.log_file_kept(os.path.basename(best_file), "best model")
     else:
-        # Delete ALL best files
+        # Move ALL best files to checkpoints
         for f in best_files:
             try:
-                os.remove(f)
+                filename = os.path.basename(f)
+                dest_path = os.path.join(config_paths.CHECKPOINTS_DIR, filename)
+                shutil.move(f, dest_path)
                 if training_logger:
-                    training_logger.log_file_deleted(f"best: {os.path.basename(f)}")
+                    training_logger.log_file_moved(f"best: {filename}", "outputs/checkpoints")
             except Exception as e:
                 if training_logger:
                     training_logger.log_file_deletion_error(f, str(e))
@@ -256,9 +269,12 @@ def cleanup_checkpoint_files(timestamp, model_name, keep_best=True, keep_final=T
         for f in final_files:
             if f != best_file:
                 try:
-                    os.remove(f)
+                    # Move old final files to checkpoints instead of deleting
+                    filename = os.path.basename(f)
+                    dest_path = os.path.join(config_paths.CHECKPOINTS_DIR, filename)
+                    shutil.move(f, dest_path)
                     if training_logger:
-                        training_logger.log_file_deleted(f"old final: {os.path.basename(f)}")
+                        training_logger.log_file_moved(f"old final: {filename}", "outputs/checkpoints")
                 except Exception as e:
                     if training_logger:
                         training_logger.log_file_deletion_error(f, str(e))
@@ -266,12 +282,14 @@ def cleanup_checkpoint_files(timestamp, model_name, keep_best=True, keep_final=T
             if training_logger:
                 training_logger.log_file_kept(os.path.basename(best_file), "final model")
     else:
-        # Delete ALL final files
+        # Move ALL final files to checkpoints
         for f in final_files:
             try:
-                os.remove(f)
+                filename = os.path.basename(f)
+                dest_path = os.path.join(config_paths.CHECKPOINTS_DIR, filename)
+                shutil.move(f, dest_path)
                 if training_logger:
-                    training_logger.log_file_deleted(f"final: {os.path.basename(f)}")
+                    training_logger.log_file_moved(f"final: {filename}", "outputs/checkpoints")
             except Exception as e:
                 if training_logger:
-                    training_logger.log_file_deletion_error(f, str(e)) 
+                    training_logger.log_file_deletion_error(f, str(e))
