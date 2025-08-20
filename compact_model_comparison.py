@@ -165,9 +165,9 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
     model_name = active_config.MODEL_NAME
     
     # Quick config overrides for fast testing
-    BATCH_SIZE = 16  # Reduced from 32 to help with CUDA memory
+    BATCH_SIZE = 64  # Reduced from 32 to help with CUDA memory
     EPOCHS = 5
-    NUM_WORKERS = 8
+    NUM_WORKERS = 12
     
     # Force override ALL parameters - ensure these take precedence
     active_config.EPOCHS = EPOCHS

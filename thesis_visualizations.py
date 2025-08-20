@@ -139,8 +139,8 @@ class ThesisVisualizer:
         elif 'few_shot' in model_name or 'fewshot' in model_name:
             return '10'
         
-        # Default to 100% for standard models
-        return '100'
+        # Return None for unrecognized patterns instead of defaulting to 100%
+        return None
     
     def detect_available_percentages(self):
         """Detect which label percentages are available in the data"""
@@ -150,21 +150,47 @@ class ThesisVisualizer:
         if self.comparison_data and 'model_results' in self.comparison_data:
             for model in self.comparison_data['model_results']:
                 pct = self.extract_label_percentage(model.get('model_name', ''))
-                available.add(pct)
+                if pct is not None:
+                    available.add(pct)
         
-        # Check checkpoint data
+        # Check checkpoint data - this is the most reliable source
         checkpoints_dir = self.outputs_dir / "checkpoints"
         if checkpoints_dir.exists():
             for checkpoint in checkpoints_dir.glob("*.pth"):
                 pct = self.extract_label_percentage(checkpoint.name)
-                available.add(pct)
+                if pct is not None:
+                    available.add(pct)
+        
+        # Also check models directory for additional model files
+        models_dir = Path("models")
+        if models_dir.exists():
+            for model_file in models_dir.glob("*.pth"):
+                pct = self.extract_label_percentage(model_file.name)
+                if pct is not None:
+                    available.add(pct)
         
         # Check training data
         for model_name in self.training_data.keys():
             pct = self.extract_label_percentage(model_name)
-            available.add(pct)
+            if pct is not None:
+                available.add(pct)
         
-        return sorted(list(available))
+        # Only return percentages that are in our defined label_percentages and have actual data
+        valid_percentages = []
+        for pct in sorted(available):
+            if pct in self.label_percentages:
+                # Verify we actually have data for this percentage
+                filtered_data = self.filter_data_by_percentage(pct)
+                has_data = (
+                    (filtered_data['comparison_data'] and filtered_data['comparison_data'].get('model_results')) or
+                    filtered_data['training_data'] or
+                    filtered_data['evaluation_data'] or
+                    filtered_data['checkpoint_data']
+                )
+                if has_data:
+                    valid_percentages.append(pct)
+        
+        return valid_percentages
     
     def filter_data_by_percentage(self, percentage):
         """Filter all data to only include models with the specified label percentage"""
@@ -179,7 +205,8 @@ class ThesisVisualizer:
         if self.comparison_data and 'model_results' in self.comparison_data:
             filtered_models = []
             for model in self.comparison_data['model_results']:
-                if self.extract_label_percentage(model.get('model_name', '')) == percentage:
+                model_pct = self.extract_label_percentage(model.get('model_name', ''))
+                if model_pct == percentage:
                     filtered_models.append(model)
             
             if filtered_models:
@@ -190,22 +217,51 @@ class ThesisVisualizer:
         
         # Filter training data
         for model_name, data in self.training_data.items():
-            if self.extract_label_percentage(model_name) == percentage:
+            model_pct = self.extract_label_percentage(model_name)
+            if model_pct == percentage:
                 filtered_data['training_data'][model_name] = data
         
         # Filter evaluation data
         for model_name, data in self.evaluation_data.items():
-            if self.extract_label_percentage(model_name) == percentage:
+            model_pct = self.extract_label_percentage(model_name)
+            if model_pct == percentage:
                 filtered_data['evaluation_data'][model_name] = data
         
         # Filter checkpoint data
-        for model_type, checkpoints in self.checkpoint_data.items():
-            filtered_checkpoints = []
-            for checkpoint in checkpoints:
-                if self.extract_label_percentage(checkpoint['filename']) == percentage:
-                    filtered_checkpoints.append(checkpoint)
-            if filtered_checkpoints:
-                filtered_data['checkpoint_data'][model_type] = filtered_checkpoints
+        checkpoints_dir = self.outputs_dir / "checkpoints"
+        models_dir = Path("models")
+        directories_to_check = []
+        if checkpoints_dir.exists():
+            directories_to_check.append(checkpoints_dir)
+        if models_dir.exists():
+            directories_to_check.append(models_dir)
+        
+        checkpoint_data = {}
+        for directory in directories_to_check:
+            for checkpoint in directory.glob("*.pth"):
+                checkpoint_pct = self.extract_label_percentage(checkpoint.name)
+                if checkpoint_pct == percentage:
+                    model_type = self.extract_model_type(checkpoint.name)
+                    if model_type not in checkpoint_data:
+                        checkpoint_data[model_type] = []
+                    
+                    # Extract accuracy from filename
+                    filename = checkpoint.name
+                    if "acc" in filename:
+                        try:
+                            acc_part = filename.split("acc")[-1].replace(".pth", "")
+                            accuracy = float(acc_part)
+                            checkpoint_data[model_type].append({
+                                'filename': checkpoint.name,
+                                'accuracy': accuracy,
+                                'size_mb': checkpoint.stat().st_size / (1024 * 1024),
+                                'type': 'best' if 'best_' in checkpoint.name else 'final' if 'final_' in checkpoint.name else 'checkpoint'
+                            })
+                        except ValueError:
+                            continue
+        
+        if checkpoint_data:
+            filtered_data['checkpoint_data'] = checkpoint_data
         
         return filtered_data
     
@@ -269,14 +325,7 @@ class ThesisVisualizer:
             model_names.append(model_type)
             accuracies.append(best_checkpoint['accuracy'])
             
-            if 'DINOv2' in model_type:
-                colors.append('#4ECDC4')
-            elif 'CNN' in model_type:
-                colors.append('#FF6B6B') 
-            elif 'ViT' in model_type:
-                colors.append('#FFE66D')
-            else:
-                colors.append('#999999')
+            colors.append(self.get_model_colors(model_type))
         
         bars = ax.bar(model_names, accuracies, color=colors, alpha=0.8, edgecolor='black', linewidth=1)
         ax.set_title('Best Model Accuracy', fontweight='bold')
@@ -360,8 +409,11 @@ class ThesisVisualizer:
             val_accs.append(model['best_val_acc'])
             training_times.append(model['time'] / 60)  # Convert to minutes
         
-        # Colors for model types
-        colors = ['#FF6B6B' if t == 'Supervised' else '#4ECDC4' for t in model_types]
+        # Colors for model types - use specific model colors
+        colors = []
+        for model in models:
+            model_name = model['model_name']
+            colors.append(self.get_model_colors(model_name))
         
         # 1. Test Accuracy Comparison
         bars1 = ax1.bar(model_names, test_accs, color=colors, alpha=0.8, edgecolor='black', linewidth=1)
@@ -405,7 +457,7 @@ class ThesisVisualizer:
                     f'{time:.1f}m', ha='center', va='bottom', fontweight='bold')
         
         # 4. Efficiency Plot (Accuracy vs Time)
-        scatter = ax4.scatter(training_times, test_accs, c=[colors[i] for i in range(len(colors))], 
+        scatter = ax4.scatter(training_times, test_accs, c=[self.get_model_colors(model_name) for model_name in [model['model_name'] for model in models]], 
                             s=200, alpha=0.8, edgecolors='black', linewidth=2)
         
         # Add model labels
@@ -420,8 +472,11 @@ class ThesisVisualizer:
         
         # Add legend for model types
         from matplotlib.patches import Patch
-        legend_elements = [Patch(facecolor='#FF6B6B', label='Supervised'),
-                          Patch(facecolor='#4ECDC4', label='Self-Supervised')]
+        legend_elements = [
+            Patch(facecolor='#FF6B6B', label='CNN (EfficientNet)'),
+            Patch(facecolor='#FFE66D', label='ViT (Supervised)'),
+            Patch(facecolor='#4ECDC4', label='DINOv2 (Self-Supervised)')
+        ]
         ax4.legend(handles=legend_elements, loc='lower right')
         
         plt.tight_layout()
@@ -632,7 +687,11 @@ class ThesisVisualizer:
             else:
                 model_sizes_mb.append(100)  # Default
         
-        colors = ['#FF6B6B' if t == 'Supervised' else '#4ECDC4' for t in model_types]
+        # Colors for model types - use specific model colors
+        colors = []
+        for model in models:
+            model_name = model['model_name']
+            colors.append(self.get_model_colors(model_name))
         
         # 1. Image Size Comparison
         bars1 = ax1.bar(model_names, [size/1000 for size in image_sizes], color=colors, alpha=0.8, edgecolor='black')
@@ -767,8 +826,9 @@ class ThesisVisualizer:
         
         # Color rows by model type
         for i in range(1, len(df) + 1):
-            model_type = df.iloc[i-1]['Type']
-            color = '#FFE6E6' if model_type == 'Supervised' else '#E6F7F7'
+            model_name = df.iloc[i-1]['Model']
+            specific_model_type = self.get_specific_model_type(model_name)
+            color = self.get_table_colors_by_model(specific_model_type)
             for j in range(len(df.columns)):
                 table[(i, j)].set_facecolor(color)
         
@@ -791,6 +851,40 @@ class ThesisVisualizer:
             
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         return fig
+    
+    def get_table_colors_by_model(self, model_type):
+        """Get table background colors for specific model types"""
+        if model_type == "DINOv2":
+            return '#B3F0E6'  # Bright light teal for DINOv2
+        elif model_type == "CNN":
+            return '#FFB3BA'  # Bright light pink for CNN
+        elif model_type == "ViT":
+            return '#FFFFE0'  # Bright light yellow for ViT
+        else:
+            return '#FFFFFF'  # White for unknown
+    
+    def get_specific_model_type(self, model_name):
+        """Get specific model type (CNN, ViT, DINOv2) from model name"""
+        if 'dinov2' in model_name.lower() or 'dino' in model_name.lower():
+            return 'DINOv2'
+        elif 'efficientnet' in model_name.lower() or 'cnn' in model_name.lower():
+            return 'CNN'
+        elif 'vit' in model_name.lower():
+            return 'ViT'
+        else:
+            return 'Unknown'
+    
+    def get_model_colors(self, model_name_or_type):
+        """Get consistent colors for specific model types across all visualizations"""
+        # Handle both model names and model types
+        if 'dinov2' in model_name_or_type.lower() or 'dino' in model_name_or_type.lower() or 'DINOv2' in model_name_or_type:
+            return '#4ECDC4'  # Teal for DINOv2
+        elif 'efficientnet' in model_name_or_type.lower() or 'cnn' in model_name_or_type.lower() or 'CNN' in model_name_or_type:
+            return '#FF6B6B'  # Red/pink for CNN
+        elif 'vit' in model_name_or_type.lower() or 'ViT' in model_name_or_type:
+            return '#FFE66D'  # Yellow for ViT
+        else:
+            return '#999999'  # Gray for unknown
     
     def generate_all_visualizations(self):
         """Generate all visualizations for the thesis, separated by label percentage"""

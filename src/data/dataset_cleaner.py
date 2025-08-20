@@ -5,7 +5,11 @@ from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing as mp
 from tqdm import tqdm
-from ..config import config_paths
+import sys
+
+# Add src directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+from src.config import config_paths
 
 def validate_image(args):
     """Validate single image - for parallel processing"""

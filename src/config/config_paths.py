@@ -5,7 +5,8 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 
 # Data paths (still in project root)
 CLEAN_DATASET_PICKLE = os.path.join(PROJECT_ROOT, "clean_dataset.pkl")
-BASE_DATA_DIR = os.path.join(PROJECT_ROOT, "crop_pest_data")
+BASE_DATA_DIR = "/root/crop_pest_data"  # Correct path to dataset
+#BASE_DATA_DIR = os.path.join(PROJECT_ROOT, "crop_pest_data")
 
 # ------------------------------------------------------------------
 # Output hierarchy

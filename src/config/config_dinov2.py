@@ -2,7 +2,7 @@ import multiprocessing as mp
 import config_paths
 
 # Dataset Configuration for DINOv2
-IMAGE_SIZE = (378, 378)  # DINOv2 typically works well with 224x224
+IMAGE_SIZE = (224, 224)  # DINOv2 typically works well with 224x224
 BATCH_SIZE = 64  # Smaller batch size due to larger models
 NUM_WORKERS = 4  # Optimal for 6-core system (fixed Docker shm)
 MAX_WORKERS = mp.cpu_count()

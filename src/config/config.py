@@ -2,7 +2,7 @@ import multiprocessing as mp
 import config_paths
 
 # Dataset Configuration
-IMAGE_SIZE = (384, 384)
+IMAGE_SIZE = (224, 224)
 BATCH_SIZE = 64
 NUM_WORKERS = 4  # Optimal for 6-core system (fixed Docker shm)
 MAX_WORKERS = mp.cpu_count()
