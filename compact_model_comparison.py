@@ -46,6 +46,7 @@ print(f"🚀 Device: {device}")
 def apply_label_hiding_few_shot(train_paths, train_labels, mode='percentage', value=0.1, random_state=42):
     """
     True few-shot learning: Keep ALL training images but hide most labels.
+    NOW WITH STRATIFIED SAMPLING FOR FAIR CLASS REPRESENTATION!
     
     Args:
         train_paths: All training image paths
@@ -61,9 +62,13 @@ def apply_label_hiding_few_shot(train_paths, train_labels, mode='percentage', va
     """
     
     total_samples = len(train_paths)
+    unique_classes = list(set(train_labels))
+    num_classes = len(unique_classes)
+    
+    print(f"🎯 Few-shot setup: {num_classes} classes, {total_samples} total samples")
     
     if mode == 'percentage':
-        # Label only X% of data
+        # Label only X% of data WITH STRATIFIED SAMPLING
         n_labeled = int(total_samples * value)
         
         # Special case: Allow 0.0 for zero-shot learning (no labeled samples)
@@ -71,31 +76,56 @@ def apply_label_hiding_few_shot(train_paths, train_labels, mode='percentage', va
             print(f"🚨 ZERO-SHOT MODE: No labeled samples (experimental)")
         else:
             # Validate: must have at least 1 labeled sample per class for supervised training
-            min_classes = len(set(train_labels))
-            if n_labeled < min_classes and n_labeled > 0:
+            if n_labeled < num_classes and n_labeled > 0:
                 raise ValueError(f"❌ FEW_SHOT_VALUE too low: {value} results in {n_labeled} labeled samples, "
-                               f"but need at least {min_classes} (1 per class) for training. "
-                               f"Use 0.0 for zero-shot or minimum: {min_classes/total_samples:.4f}")
+                               f"but need at least {num_classes} (1 per class) for training. "
+                               f"Use 0.0 for zero-shot or minimum: {num_classes/total_samples:.4f}")
         
         if n_labeled == 0:
             # Zero-shot: no labeled samples
             labeled_indices = np.array([], dtype=int)
         else:
-            labeled_indices = np.random.RandomState(random_state).choice(
-                total_samples, n_labeled, replace=False
-            )
+            # 🔥 STRATIFIED SAMPLING: Ensure each class gets fair representation
+            labeled_indices = []
+            samples_per_class = n_labeled // num_classes
+            remaining_samples = n_labeled % num_classes
+            
+            rng = np.random.RandomState(random_state)
+            
+            for i, class_name in enumerate(sorted(unique_classes)):
+                class_indices = [idx for idx, label in enumerate(train_labels) if label == class_name]
+                
+                # Give each class at least 'samples_per_class' samples
+                n_take = samples_per_class
+                
+                # Distribute remaining samples to first few classes
+                if i < remaining_samples:
+                    n_take += 1
+                
+                # Can't take more samples than available for this class
+                n_take = min(n_take, len(class_indices))
+                
+                if n_take > 0:
+                    selected = rng.choice(class_indices, n_take, replace=False)
+                    labeled_indices.extend(selected)
+            
+            labeled_indices = np.array(labeled_indices)
+            print(f"🎯 Stratified sampling: {len(labeled_indices)} labeled samples across {num_classes} classes")
         
     elif mode == 'per_class':
-        # Label only X samples per class
+        # Label only X samples per class (this is already stratified by design)
         labeled_indices = []
-        for class_name in set(train_labels):
+        rng = np.random.RandomState(random_state)
+        
+        for class_name in sorted(unique_classes):
             class_indices = [i for i, label in enumerate(train_labels) if label == class_name]
             n_take = min(int(value), len(class_indices))
-            selected = np.random.RandomState(random_state).choice(
-                class_indices, n_take, replace=False
-            )
-            labeled_indices.extend(selected)
+            if n_take > 0:
+                selected = rng.choice(class_indices, n_take, replace=False)
+                labeled_indices.extend(selected)
+        
         labeled_indices = np.array(labeled_indices)
+        print(f"🎯 Per-class sampling: {int(value)} samples per class × {num_classes} classes = {len(labeled_indices)} total")
     
     # ------------------------------------------------------------------
     # Efficient O(N) mask creation
@@ -152,7 +182,8 @@ class SimpleConfig:
         if not hasattr(self, 'RANDOM_STATE'):
             self.RANDOM_STATE = getattr(config_module, 'RANDOM_STATE', 42)
 
-def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_value=0.1, comparison_logger=None):
+def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_value=0.1, 
+              experiment_context=None, comparison_logger=None):
     """Run single model training and return results"""
     # Select config (create a simple config object that can be safely modified)
     if model_type == 'dinov2':
@@ -164,15 +195,15 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
     active_config = SimpleConfig(base_config)
     model_name = active_config.MODEL_NAME
     
-    # Quick config overrides for fast testing
-    BATCH_SIZE = 64  # Reduced from 32 to help with CUDA memory
-    EPOCHS = 5
+    # Research-quality config overrides (not "fast testing"!)
+    BATCH_SIZE = 64  # Good for GPU memory
     NUM_WORKERS = 12
     
-    # Force override ALL parameters - ensure these take precedence
-    active_config.EPOCHS = EPOCHS
+    # Force override parameters - ensure these take precedence
     active_config.NUM_WORKERS = NUM_WORKERS
-    active_config.BATCH_SIZE = BATCH_SIZE  # Force override (removed min() to ensure override)
+    active_config.BATCH_SIZE = BATCH_SIZE
+    
+    # DON'T override EPOCHS here - let regime-specific function handle it
     
     # Debug: Verify all overrides
     print(f"🔧 Config overrides:")
@@ -193,18 +224,36 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         setattr(active_config, 'FEW_SHOT_MODE', few_shot_mode)
         setattr(active_config, 'FEW_SHOT_VALUE', few_shot_value)
     
-    # Log model start
+    # Get training_regime from experiment_context (needed for logging and results)
+    if experiment_context:
+        training_regime_for_log = experiment_context.get('training_regime', 'unknown')
+    else:
+        training_regime_for_log = 'unknown'
+    
+    # Log model start with CLEAR EXPERIMENT CONTEXT
     if comparison_logger:
+        # Create enhanced config with experiment context
         config_info = {
             'epochs': active_config.EPOCHS,
             'batch_size': active_config.BATCH_SIZE,
             'num_workers': active_config.NUM_WORKERS,
             'image_size': active_config.IMAGE_SIZE,
             'learning_rate': active_config.LEARNING_RATE,
+            'weight_decay': getattr(active_config, 'WEIGHT_DECAY', 0.01),
+            'dropout': getattr(active_config, 'DROPOUT', 0.1),
+            'scheduler': getattr(active_config, 'SCHEDULER', 'plateau'),
             'validate_images': getattr(active_config, 'VALIDATE_IMAGES', False),
             'few_shot_mode': few_shot_mode,
-            'few_shot_value': few_shot_value
+            'few_shot_value': few_shot_value,
+            'training_regime': training_regime_for_log,
+            'freeze_backbone': getattr(active_config, 'FREEZE_BACKBONE', False),
+            'unfreeze_after_epoch': getattr(active_config, 'UNFREEZE_AFTER_EPOCH', None),
         }
+        
+        # Add experiment context if provided
+        if experiment_context:
+            config_info.update(experiment_context)
+            
         comparison_logger.log_model_start(model_type, model_name, config_info)
     
     start_time = time.time()
@@ -334,10 +383,13 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         class_names = train_dataset.classes
         class_to_idx = train_dataset.class_to_idx
         
-        # Create model
-        model = model_setup.create_model(num_classes, model_name, active_config).to(device)
+        # Create model (using potentially updated model_name with experiment context)
+        current_model_name = active_config.MODEL_NAME  # This may have been updated with experiment context
+        model = model_setup.create_model(num_classes, current_model_name, active_config).to(device)
         
         print(f"🎯 Classes: {num_classes}, Parameters: {sum(p.numel() for p in model.parameters()):,}")
+        if experiment_context:
+            print(f"💾 Model checkpoints will be saved with identifier: {current_model_name}")
         
         # Create optimizer and scheduler
         optimizer = torch.optim.Adam(model.parameters(), lr=active_config.LEARNING_RATE)
@@ -352,7 +404,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             criterion = base_criterion
             print(f"🎯 Using standard loss function")
         
-        # Train model
+        # Train model (using updated model name with experiment context)
         train_result = training.train_model(
             model=model,
             train_loader=train_loader,
@@ -361,7 +413,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             optimizer=optimizer,
             scheduler=scheduler,
             device=device,
-            model_name=model_name,
+            model_name=current_model_name,  # Use experiment-specific name
             class_names=class_names,
             class_to_idx=class_to_idx,
             use_amp=device.type == 'cuda',
@@ -369,13 +421,13 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             test_loader=test_loader  # Pass test_loader for dataset size logging
         )
         
-        # Test evaluation
+        # Test evaluation (using updated model name with experiment context)
         test_result = evaluation.comprehensive_test_evaluation(
             model=model,
             test_loader=test_loader,
             device=device,
             class_names=class_names,
-            model_name=model_name,
+            model_name=current_model_name,  # Use experiment-specific name
             config_module=active_config,
             use_amp=device.type == 'cuda'
         )
@@ -387,9 +439,13 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         val_size_actual = len(val_loader.dataset)  # type: ignore
         test_size_actual = len(test_loader.dataset)  # type: ignore
         
+        # Get the best model path from training results
+        best_model_path = train_result.get('best_model_path', None)
+        
         result = {
             'model_type': model_type,
-            'model_name': model_name,
+            'model_name': current_model_name,  # Use experiment-specific name
+            'original_model_name': model_name,  # Keep original for reference
             'success': True,
             'time': end_time - start_time,
             'train_accuracy': train_result.get('train_accuracies', [0])[-1],  # Get final training accuracy
@@ -406,21 +462,241 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             'few_shot_value': few_shot_value,
             'few_shot_info': few_shot_info,
             'validate_images': getattr(active_config, 'VALIDATE_IMAGES', False),
+            'best_model_path': best_model_path,  # Path to saved model
+            'training_regime': training_regime_for_log,
+            'learning_rate': active_config.LEARNING_RATE,
+            'weight_decay': getattr(active_config, 'WEIGHT_DECAY', 0.01),
+            'dropout': getattr(active_config, 'DROPOUT', 0.1),
         }
         
         if comparison_logger:
-            comparison_logger.log_model_complete(model_type, model_name, result)
+            comparison_logger.log_model_complete(model_type, current_model_name, result)
 
         return result
         
     except Exception as e:
+        current_model_name = getattr(active_config, 'MODEL_NAME', 'unknown')  # Get the updated name if available
         error_result = {'model_type': model_type, 'success': False, 'error': str(e), 'time': time.time() - start_time}
         if comparison_logger:
-            comparison_logger.log_model_complete(model_type, model_name, error_result)
+            comparison_logger.log_model_complete(model_type, current_model_name, error_result)
         return error_result
 
+def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_value=0.1, 
+                         training_regime='supervised', freeze_backbone=False, random_seed=42, 
+                         experiment_context=None, comparison_logger=None):
+    """Run model with specific training regime (frozen vs fine-tuned)"""
+    
+    # Select and modify config based on training regime
+    if model_type == 'dinov2':
+        base_config = config_dinov2
+    elif model_type == 'vit':
+        base_config = config_vit
+    else:
+        base_config = config
+    
+    active_config = SimpleConfig(base_config)
+    
+    # 🔥 CREATE UNIQUE MODEL IDENTIFIER FOR SAVING
+    # Include experiment context in model name so you can distinguish saved models
+    if experiment_context:
+        label_desc = experiment_context['label_description']
+        regime_short = training_regime.replace('_', '').upper()[:4]  # e.g., LINP, FINE, SUPR
+        seed_str = f"_s{experiment_context['random_seed']}" if experiment_context['random_seed'] != 42 else ""
+        
+        # Create unique model identifier: e.g., "dinov2_vitb14_FINE_50pct_s42"
+        unique_model_id = f"{active_config.MODEL_NAME}_{regime_short}_{label_desc.replace('%', 'pct')}{seed_str}"
+        
+        # Override the model name in config so all saving uses this unique identifier
+        active_config.MODEL_NAME = unique_model_id
+        
+        print(f"📝 Model will be saved as: {unique_model_id}")
+    
+    # 🔥 FAIR COMPETITION: Research-quality hyperparameters optimized for each strategy
+    if training_regime == 'linear_probe':
+        # Linear probe: freeze backbone, only train classifier head
+        active_config.FREEZE_BACKBONE = True
+        active_config.UNFREEZE_AFTER_EPOCH = 999  # Never unfreeze
+        active_config.EPOCHS = 5   # ✅ QUICK TEST: Reduced epochs (was 15)
+        active_config.LEARNING_RATE = 0.001  # Fair LR for all models in linear probe
+        active_config.WEIGHT_DECAY = 0.01
+        
+        # Model-specific dropout (pre-trained features need less regularization)
+        if model_type == 'dinov2':
+            active_config.DROPOUT = 0.1  # Lower dropout for pre-trained features
+        else:
+            active_config.DROPOUT = 0.15  # Slightly higher for CNN/ViT linear probe
+            
+        print(f"🧊 Linear probe: frozen backbone, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
+        
+    elif training_regime == 'fine_tune':
+        # Fine-tuning: progressive unfreezing (only for DiNO, but keeping general)
+        active_config.FREEZE_BACKBONE = True
+        active_config.UNFREEZE_AFTER_EPOCH = 3   # ✅ QUICK TEST: Earlier unfreeze (was 5)
+        active_config.EPOCHS = 8   # ✅ QUICK TEST: Reduced epochs (was 25)
+        active_config.LEARNING_RATE = 0.0005  # Lower LR for stable fine-tuning
+        active_config.WEIGHT_DECAY = 0.01
+        active_config.DROPOUT = 0.1  # Lower dropout for fine-tuning
+            
+        print(f"🔥 Fine-tune: progressive unfreeze @ epoch {active_config.UNFREEZE_AFTER_EPOCH}, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
+        
+    else:  # supervised
+        # Supervised: full training from scratch
+        active_config.FREEZE_BACKBONE = False
+        active_config.EPOCHS = 8   # ✅ QUICK TEST: Reduced epochs (was 25)
+        active_config.WEIGHT_DECAY = 0.01
+        
+        # Model-specific learning rates (fair but optimized)
+        if model_type == 'cnn':
+            active_config.LEARNING_RATE = 0.001   # Standard for CNNs
+            active_config.DROPOUT = 0.2           # Higher dropout for training from scratch
+        elif model_type == 'vit':
+            active_config.LEARNING_RATE = 0.0008  # Slightly lower for ViTs
+            active_config.DROPOUT = 0.1           # ViT-appropriate dropout
+        else:  # dinov2 supervised (theoretical case)
+            active_config.LEARNING_RATE = 0.0005  # Conservative for ViT architecture
+            active_config.DROPOUT = 0.1
+            
+        print(f"🚀 Supervised: full training, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
+    
+    # 🎯 TRAINING STRATEGY OPTIMIZATIONS
+    
+    # Learning rate scheduling (regime-appropriate)
+    if training_regime == 'linear_probe':
+        # Linear probe: step decay works well for frozen features
+        active_config.SCHEDULER = 'step'
+        active_config.SCHEDULER_PARAMS = {'step': {'step_size': 7, 'gamma': 0.5}}
+        active_config.USE_WARMUP = False  # No warmup needed for linear probe
+        
+    elif training_regime == 'fine_tune':
+        # Fine-tuning: cosine annealing for smooth feature adaptation
+        active_config.SCHEDULER = 'cosine'
+        active_config.SCHEDULER_PARAMS = {'cosine': {'T_max': active_config.EPOCHS, 'eta_min': 1e-7}}
+        active_config.USE_WARMUP = True
+        active_config.WARMUP_EPOCHS = 3
+        active_config.WARMUP_START_LR = 1e-7
+        
+    else:  # supervised
+        # Supervised: plateau scheduler for adaptive learning
+        active_config.SCHEDULER = 'plateau'
+        active_config.SCHEDULER_PARAMS = {'plateau': {'mode': 'min', 'patience': 5, 'factor': 0.5}}
+        active_config.USE_WARMUP = True
+        active_config.WARMUP_EPOCHS = 3
+        active_config.WARMUP_START_LR = 1e-6
+    
+    # Override random seed for reproducibility
+    active_config.RANDOM_STATE = random_seed
+    
+    # Apply the modified config to the current context
+    # Store original config and replace with modified one
+    if model_type == 'dinov2':
+        original_config = config_dinov2
+        # Temporarily replace the module attributes
+        for attr in ['FREEZE_BACKBONE', 'UNFREEZE_AFTER_EPOCH', 'LEARNING_RATE', 'RANDOM_STATE', 
+                     'EPOCHS', 'WEIGHT_DECAY', 'DROPOUT', 'SCHEDULER', 'SCHEDULER_PARAMS', 
+                     'USE_WARMUP', 'WARMUP_EPOCHS', 'WARMUP_START_LR']:
+            if hasattr(active_config, attr):
+                setattr(original_config, attr, getattr(active_config, attr))
+    elif model_type == 'vit':
+        original_config = config_vit
+        for attr in ['FREEZE_BACKBONE', 'UNFREEZE_AFTER_EPOCH', 'LEARNING_RATE', 'RANDOM_STATE',
+                     'EPOCHS', 'WEIGHT_DECAY', 'DROPOUT', 'SCHEDULER', 'SCHEDULER_PARAMS',
+                     'USE_WARMUP', 'WARMUP_EPOCHS', 'WARMUP_START_LR']:
+            if hasattr(active_config, attr):
+                setattr(original_config, attr, getattr(active_config, attr))
+    else:
+        original_config = config
+        for attr in ['FREEZE_BACKBONE', 'UNFREEZE_AFTER_EPOCH', 'LEARNING_RATE', 'RANDOM_STATE',
+                     'EPOCHS', 'WEIGHT_DECAY', 'DROPOUT', 'SCHEDULER', 'SCHEDULER_PARAMS',
+                     'USE_WARMUP', 'WARMUP_EPOCHS', 'WARMUP_START_LR']:
+            if hasattr(active_config, attr):
+                setattr(original_config, attr, getattr(active_config, attr))
+    
+    # Use the existing run_model function
+    return run_model(
+        model_type=model_type,
+        sample_size=sample_size,
+        few_shot_mode=few_shot_mode,
+        few_shot_value=few_shot_value,
+        experiment_context=experiment_context,
+        comparison_logger=comparison_logger
+    )
+
+def aggregate_results_by_condition(all_results):
+    """Aggregate results by (budget, regime, model) to compute mean ± std"""
+    from collections import defaultdict
+    import statistics
+    
+    # Group results by condition
+    grouped = defaultdict(list)
+    
+    for result in all_results:
+        if not result.get('success', False):
+            continue  # Skip failed experiments
+            
+        # Create condition key
+        condition = (
+            result['budget_mode'],
+            result['budget_value'], 
+            result['model_type'],
+            result['training_regime']
+        )
+        
+        grouped[condition].append(result['test_accuracy'])
+    
+    # Compute statistics for each condition
+    aggregated = {}
+    for condition, accuracies in grouped.items():
+        if len(accuracies) > 0:
+            mean_acc = statistics.mean(accuracies)
+            std_acc = statistics.stdev(accuracies) if len(accuracies) > 1 else 0.0
+            
+            budget_mode, budget_value, model_type, regime = condition
+            aggregated[condition] = {
+                'budget_mode': budget_mode,
+                'budget_value': budget_value,
+                'model_type': model_type,
+                'training_regime': regime,
+                'mean_accuracy': mean_acc,
+                'std_accuracy': std_acc,
+                'num_runs': len(accuracies),
+                'all_accuracies': accuracies
+            }
+    
+    return aggregated
+
+def print_statistical_summary(aggregated_results):
+    """Print statistical summary of results"""
+    print("\n" + "="*80)
+    print("📊 STATISTICAL SUMMARY (Mean ± Std)")
+    print("="*80)
+    
+    # Sort by budget value for easy comparison
+    sorted_results = sorted(aggregated_results.items(), 
+                          key=lambda x: (x[1]['budget_value'], x[1]['model_type'], x[1]['training_regime']))
+    
+    current_budget = None
+    for condition, stats in sorted_results:
+        budget_str = f"{stats['budget_mode']}={stats['budget_value']}"
+        
+        if budget_str != current_budget:
+            print(f"\n🎯 Label Budget: {budget_str}")
+            print("-" * 50)
+            current_budget = budget_str
+        
+        regime_str = f"{stats['training_regime']}" if stats['training_regime'] != 'supervised' else ""
+        model_name = f"{stats['model_type'].upper()}"
+        if regime_str:
+            model_name += f" ({regime_str})"
+        
+        print(f"{model_name:25} {stats['mean_accuracy']:6.2f}% ± {stats['std_accuracy']:5.2f}% (n={stats['num_runs']})")
+    
+    print("\n" + "="*80)
+
 def main():
-    """Main comparison function"""
+    """Main comparison function with MULTIPLE SEEDS and TRAINING REGIMES"""
+    print("🚀 QUICK TEST MODE: 1000 samples, reduced epochs (~1-2 hours)")
+    print("🔧 For full experiment: change SAMPLE_SIZE=10000, EPOCHS back to (15,25,25)")
+    
     # Initialize comparison logger
     comparison_logger = ComparisonLogger()
     
@@ -433,64 +709,201 @@ def main():
     total_dataset_size = len(temp_train) + len(temp_val) + len(temp_test)
     
     # 📊 DATASET SIZE Configuration:
-    #SAMPLE_SIZE = int(total_dataset_size * 0.1)     # ✅ CURRENTLY ACTIVE: Use 10% of dataset  
-    SAMPLE_SIZE = 10000                            # Use full dataset (~25K samples)
-    # SAMPLE_SIZE = int(total_dataset_size * 0.01)  # Use 1% of dataset
-    # SAMPLE_SIZE = 500                             # Use exactly 500 samples
+    # SAMPLE_SIZE = 10000                            # Full experiment (9-13 hours)
+    # SAMPLE_SIZE = 1000                             # ✅ QUICK TEST: Small dataset (~1-2 hours)
+    SAMPLE_SIZE = 500                             # Even faster test
     
-    # 🎯 TRUE FEW-SHOT LEARNING Configuration (LABEL HIDING - not dataset reduction):
-    FEW_SHOT_MODE = 'percentage'                   # Enable zero-shot learning
-    #FEW_SHOT_MODE = None                          # Disable few-shot learning
-    # FEW_SHOT_MODE = 'per_class'                   # Hide labels: only X samples per class have labels
-    FEW_SHOT_VALUE = 0.0                           # 0% labeled data = ZERO-SHOT (no labels at all)
+    # 🎯 CRITICAL: Label efficiency analysis - how much labeled data is needed?
+    LABEL_BUDGETS = [
+        ('percentage', 0.1),   # 10% of labels visible (few-shot learning)
+        ('percentage', 0.5),   # 50% of labels visible (medium-shot learning)  
+        ('percentage', 1.0)    # 100% of labels visible (full supervision)
+    ]
     
-    # 💡 TRUE FEW-SHOT means: Model sees ALL images but most labels are hidden (-1)
-    # 💡 This is different from dataset reduction (which would show fewer images)
+    # 🎯 Single seed for faster experimentation (can expand to 3+ seeds later for publication)
+    RANDOM_SEEDS = [42]  # Single seed for manageable runtime
     
-    if SAMPLE_SIZE is None:
-        print(f"🎯 Dataset: Full dataset ({total_dataset_size:,} samples)")
-    else:
-        percentage = (SAMPLE_SIZE / total_dataset_size) * 100
-        print(f"🎯 Dataset: {SAMPLE_SIZE:,} samples ({percentage:.1f}% of {total_dataset_size:,})")
-    if FEW_SHOT_MODE is None:
-        print(f"🎯 Few-shot: Disabled (all images have labels)")
-    else:
-        print(f"🎯 Few-shot: {FEW_SHOT_MODE} ({FEW_SHOT_VALUE}) - LABEL HIDING mode")
-        print(f"   💡 Models see ALL images but only some have labels!")
+    # 🎯 CRITICAL: Different training regimes for fair comparison
+    TRAINING_REGIMES = {
+        'cnn': ['supervised'],  # CNN always supervised
+        'dinov2': ['linear_probe', 'fine_tune'],  # DINOv2: frozen vs fine-tuned
+        'vit': ['supervised']   # ViT supervised (can add frozen if needed)
+    }
     
-    # 🤖 MODEL SELECTION (these are just type labels, real names come from configs)
+    print(f"🎯 Dataset: {SAMPLE_SIZE:,} samples ({SAMPLE_SIZE/total_dataset_size*100:.1f}% of {total_dataset_size:,})")
+    print(f"🎯 Label budgets: {len(LABEL_BUDGETS)} budgets × {len(RANDOM_SEEDS)} seeds × models")
+    print(f"🎯 Training regimes: {TRAINING_REGIMES}")
+    
+    # 🤖 MODEL SELECTION 
     model_types = [
-        ('cnn', config.MODEL_NAME),        # config.py → e.g., 'efficientnet_b3'
-        ('dinov2', config_dinov2.MODEL_NAME),   # config_dinov2.py → e.g., 'dinov2_vits14'
-        ('vit', config_vit.MODEL_NAME)     # config_vit.py → e.g., 'vit_base_patch16_224'
+        ('cnn', config.MODEL_NAME),
+        ('dinov2', config_dinov2.MODEL_NAME),
+        ('vit', config_vit.MODEL_NAME)
     ]
     
     # Log experiment start
     dataset_info = {'total_dataset_size': total_dataset_size}
     experiment_config = {
         'sample_size': SAMPLE_SIZE,
-        'few_shot_mode': FEW_SHOT_MODE,
-        'few_shot_value': FEW_SHOT_VALUE,
+        'label_budgets': LABEL_BUDGETS,
+        'random_seeds': RANDOM_SEEDS,
+        'training_regimes': TRAINING_REGIMES,
         'models': model_types
     }
     comparison_logger.log_experiment_start(dataset_info, experiment_config)
     
-    results = []
+    all_results = []
     
-    # 🚀 RUN BOTH MODELS
-    for model_type, actual_name in model_types:
-        result = run_model(model_type, SAMPLE_SIZE, FEW_SHOT_MODE, FEW_SHOT_VALUE, comparison_logger)
-        results.append(result)
+    # 🚀 RUN COMPREHENSIVE EXPERIMENTS
+    total_experiments = len(LABEL_BUDGETS) * len(RANDOM_SEEDS) * sum(len(regimes) for regimes in TRAINING_REGIMES.values())
+    experiment_count = 0
+    
+    for budget_idx, (budget_mode, budget_value) in enumerate(LABEL_BUDGETS, 1):
+        label_desc = f"{int(budget_value*100)}%" if budget_mode == 'percentage' else f"{budget_value}/class"
         
-        # Clear GPU cache
-        if device.type == 'cuda':
-            comparison_logger.log_gpu_cleanup()
-            torch.cuda.empty_cache()
+        print(f"\n" + "="*80)
+        print(f"🔥 LABEL BUDGET {budget_idx}/{len(LABEL_BUDGETS)}: {label_desc} of training labels visible")
+        print(f"   📊 Mode: {budget_mode} | Value: {budget_value}")
+        print("="*80)
+        
+        for seed in RANDOM_SEEDS:
+            print(f"\n🎲 Random seed: {seed}")
+            
+            # Update global seed
+            random.seed(seed)
+            np.random.seed(seed)
+            torch.manual_seed(seed)
+            torch.cuda.manual_seed(seed)
+            
+            for model_type, actual_name in model_types:
+                regimes = TRAINING_REGIMES[model_type]
+                
+                for regime in regimes:
+                    experiment_count += 1
+                    
+                    # 🔥 ENHANCED EXPERIMENT IDENTIFICATION
+                    label_desc = f"{int(budget_value*100)}%" if budget_mode == 'percentage' else f"{budget_value}/class"
+                    experiment_title = f"{model_type.upper()}-{regime.upper()}, {label_desc} labels"
+                    
+                    print(f"\n🚀 EXPERIMENT [{experiment_count}/{total_experiments}]: {experiment_title}")
+                    print(f"   🎲 Seed: {seed} | 🏷️ Budget: {budget_mode}={budget_value}")
+                    
+                    # Create experiment context for logging
+                    experiment_context = {
+                        'experiment_number': experiment_count,
+                        'total_experiments': total_experiments,
+                        'experiment_title': experiment_title,
+                        'label_description': label_desc,
+                        'budget_mode': budget_mode,
+                        'budget_value': budget_value,
+                        'random_seed': seed,
+                        'training_regime': regime  # Add training regime to context
+                    }
+                    
+                    # Modify config based on training regime
+                    freeze_backbone = (regime == 'linear_probe')
+                    
+                    result = run_model_with_regime(
+                        model_type=model_type,
+                        sample_size=SAMPLE_SIZE,
+                        few_shot_mode=budget_mode,
+                        few_shot_value=budget_value,
+                        training_regime=regime,
+                        freeze_backbone=freeze_backbone,
+                        random_seed=seed,
+                        experiment_context=experiment_context,
+                        comparison_logger=comparison_logger
+                    )
+                    
+                    # Add experiment metadata  
+                    result.update({
+                        'budget_mode': budget_mode,
+                        'budget_value': budget_value,
+                        'training_regime': regime,
+                        'random_seed': seed,
+                        'freeze_backbone': freeze_backbone,
+                        'experiment_number': experiment_count,
+                        'experiment_title': experiment_title
+                    })
+                    
+                    all_results.append(result)
+                    
+                    # 📊 EXPERIMENT COMPLETION SUMMARY
+                    if result.get('success', False):
+                        test_acc = result.get('test_accuracy', 0)
+                        train_acc = result.get('train_accuracy', 0)
+                        model_path = result.get('best_model_path', 'No path available')
+                        print(f"   ✅ COMPLETED: Train={train_acc:.1f}%, Test={test_acc:.1f}%")
+                        if model_path and model_path != 'No path available':
+                            print(f"   💾 Model saved: {model_path}")
+                        else:
+                            print(f"   💾 Model saved as: {result.get('model_name', 'unknown')}")
+                    else:
+                        print(f"   ❌ FAILED: {result.get('error', 'Unknown error')}")
+                    
+                    print(f"   📈 Progress: {experiment_count}/{total_experiments} experiments done")
+                    print("   " + "="*60)
+                    
+                    # Clear GPU cache
+                    if device.type == 'cuda':
+                        comparison_logger.log_gpu_cleanup()
+                        torch.cuda.empty_cache()
     
-    # Log comparison results and save
-    comparison_logger.log_comparison_results(results)
+    # 📊 AGGREGATE RESULTS: Compute mean ± std per (budget, regime, model)
+    aggregated_results = aggregate_results_by_condition(all_results)
+    
+    # Log and save results
+    comparison_logger.log_comparison_results(all_results)
     comparison_logger.log_experiment_summary()
-    results_file = comparison_logger.save_comparison_results(results)
+    results_file = comparison_logger.save_comparison_results(all_results)
+    
+    # Save aggregated results separately (in case logger doesn't support it)
+    try:
+        import json
+        import os
+        aggregated_file = results_file.replace('.json', '_aggregated.json')
+        with open(aggregated_file, 'w') as f:
+            # Convert condition tuples to strings for JSON serialization
+            json_compatible = {}
+            for condition, stats in aggregated_results.items():
+                key = f"{stats['model_type']}_{stats['training_regime']}_{stats['budget_mode']}{stats['budget_value']}"
+                json_compatible[key] = stats
+            json.dump(json_compatible, f, indent=2)
+        print(f"📊 Aggregated results saved to: {aggregated_file}")
+    except Exception as e:
+        print(f"⚠️ Could not save aggregated results: {e}")
+    
+    # 🎉 FINAL EXPERIMENT SUMMARY
+    print(f"\n" + "="*80)
+    print(f"🎉 COMPREHENSIVE EXPERIMENT COMPLETED!")
+    print(f"📊 Total experiments run: {len(all_results)}")
+    print(f"✅ Successful: {sum(1 for r in all_results if r.get('success', False))}")
+    print(f"❌ Failed: {sum(1 for r in all_results if not r.get('success', False))}")
+    print(f"📁 Results saved to: {results_file}")
+    print(f"📁 Aggregated results: {aggregated_file}")
+    
+    # 💾 SAVED MODELS SUMMARY
+    print(f"\n💾 SAVED MODELS SUMMARY:")
+    print("-" * 80)
+    successful_results = [r for r in all_results if r.get('success', False)]
+    if successful_results:
+        for result in successful_results:
+            experiment_title = result.get('experiment_title', 'Unknown')
+            model_name = result.get('model_name', 'Unknown')
+            test_acc = result.get('test_accuracy', 0)
+            model_path = result.get('best_model_path', 'No path')
+            
+            print(f"📌 {experiment_title}: {test_acc:.1f}%")
+            print(f"   🔧 Model ID: {model_name}")
+            if model_path and model_path != 'No path':
+                print(f"   📁 Path: {model_path}")
+            print()
+    else:
+        print("   No models were successfully saved.")
+    
+    print("="*80)
+    
+    print_statistical_summary(aggregated_results)
 
 if __name__ == "__main__":
     main() 
