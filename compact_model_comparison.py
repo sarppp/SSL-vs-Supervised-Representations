@@ -718,6 +718,25 @@ def print_statistical_summary(aggregated_results):
     
     print("\n" + "="*80)
 
+def print_experiment_console_summary(all_results, start_time, end_time):
+    total_time = end_time - start_time
+    print(f"\n⏱️ Total experiment time: {total_time:.1f} seconds")
+
+    # Find best model by test accuracy
+    successful_results = [r for r in all_results if r.get('success', False)]
+    if successful_results:
+        best = max(successful_results, key=lambda x: x.get('test_accuracy', 0))
+        print(f"\n🏆 BEST MODEL: {best['model_type'].upper()} | Regime: {best.get('training_regime', 'N/A')} | Test Accuracy: {best['test_accuracy']:.2f}% | Model: {best.get('model_name', 'N/A')}")
+        print(f"   Model path: {best.get('best_model_path', 'N/A')}")
+    else:
+        print("\nNo successful models to report best from.")
+
+    # Print per-experiment summary table
+    print("\n📋 EXPERIMENT SUMMARY TABLE:")
+    print(f"{'#':<3} {'Model':<10} {'Regime':<12} {'Budget':<10} {'Train Acc':<10} {'Test Acc':<10} {'Time (s)':<10} {'Model Name':<30}")
+    for idx, r in enumerate(successful_results, 1):
+        print(f"{idx:<3} {r['model_type']:<10} {r.get('training_regime', 'N/A'):<12} {str(r.get('few_shot_info', {}).get('mode', 'N/A')) + '=' + str(r.get('few_shot_info', {}).get('value', 'N/A')):<10} {r.get('train_accuracy', 0):<10.2f} {r.get('test_accuracy', 0):<10.2f} {r.get('time', 0):<10.1f} {r.get('model_name', ''):<30}")
+
 def main():
     """Main comparison function with MULTIPLE SEEDS and TRAINING REGIMES"""
     print("🚀 QUICK TEST MODE: 1000 samples, reduced epochs (~1-2 hours)")
@@ -930,6 +949,8 @@ def main():
     print("="*80)
     
     print_statistical_summary(aggregated_results)
+    end_time = time.time()
+    print_experiment_console_summary(all_results, start_time, end_time)
 
 if __name__ == "__main__":
     main() 
