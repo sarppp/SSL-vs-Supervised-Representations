@@ -383,9 +383,26 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         class_names = train_dataset.classes
         class_to_idx = train_dataset.class_to_idx
         
-        # Create model (using potentially updated model_name with experiment context)
-        current_model_name = active_config.MODEL_NAME  # This may have been updated with experiment context
-        model = model_setup.create_model(num_classes, current_model_name, active_config).to(device)
+        # Create model (using potentially updated model_name with experiment context)  
+        current_model_name = model_name  # Use the updated model_name (which includes experiment context)
+        
+        # For model creation, use the original architecture name
+        if experiment_context:
+            # Extract original model name for architecture creation
+            original_name = current_model_name.split('_')[0] + '_' + current_model_name.split('_')[1]
+            if len(current_model_name.split('_')) > 2:
+                # Handle cases like "vit_base_patch16_224_SUPR_10pct"
+                parts = current_model_name.split('_')
+                if 'vit' in current_model_name:
+                    original_name = '_'.join(parts[:4])  # vit_base_patch16_224
+                elif 'dinov2' in current_model_name:
+                    original_name = '_'.join(parts[:2])  # dinov2_vitb14
+                elif 'efficientnet' in current_model_name:
+                    original_name = '_'.join(parts[:2])  # efficientnet_b4
+        else:
+            original_name = current_model_name
+            
+        model = model_setup.create_model(num_classes, original_name, active_config).to(device)
         
         print(f"🎯 Classes: {num_classes}, Parameters: {sum(p.numel() for p in model.parameters()):,}")
         if experiment_context:
@@ -496,6 +513,9 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
     
     active_config = SimpleConfig(base_config)
     
+    # Get the original model name from config
+    original_model_name = active_config.MODEL_NAME
+    
     # 🔥 CREATE UNIQUE MODEL IDENTIFIER FOR SAVING
     # Include experiment context in model name so you can distinguish saved models
     if experiment_context:
@@ -504,12 +524,18 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
         seed_str = f"_s{experiment_context['random_seed']}" if experiment_context['random_seed'] != 42 else ""
         
         # Create unique model identifier: e.g., "dinov2_vitb14_FINE_50pct_s42"
-        unique_model_id = f"{active_config.MODEL_NAME}_{regime_short}_{label_desc.replace('%', 'pct')}{seed_str}"
+        unique_model_id = f"{original_model_name}_{regime_short}_{label_desc.replace('%', 'pct')}{seed_str}"
         
         # Override the model name in config so all saving uses this unique identifier
         active_config.MODEL_NAME = unique_model_id
         
+        # Set the model name for this function
+        model_name = unique_model_id
+        
         print(f"📝 Model will be saved as: {unique_model_id}")
+        print(f"📝 All logs will use identifier: {unique_model_id}")
+    else:
+        model_name = original_model_name
     
     # 🔥 FAIR COMPETITION: Research-quality hyperparameters optimized for each strategy
     if training_regime == 'linear_probe':
