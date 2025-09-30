@@ -227,6 +227,29 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         NUM_WORKERS = GPU_CONFIG['num_workers']
         print(f"🔧 Using preset: {GPU_CONFIG['name']}")
         print(f"📊 {GPU_CONFIG['description']}")
+        # Auto-scale learning rate when the preset declares it
+        if GPU_CONFIG.get('auto_scale_lr', False):
+            base_lr = active_config.LEARNING_RATE
+            lr_multiplier = GPU_CONFIG.get('lr_multiplier')
+            if lr_multiplier is not None:
+                active_config.LEARNING_RATE = base_lr * float(lr_multiplier)
+                try:
+                    print(f"⚙️  Auto LR scaling: {base_lr:.6g} × {float(lr_multiplier):.3g} -> {active_config.LEARNING_RATE:.6g}")
+                except Exception:
+                    print(f"⚙️  Auto LR scaling applied. New LR = {active_config.LEARNING_RATE}")
+            else:
+                # Fallback to batch-size-based scaling via helper if available
+                try:
+                    from gpu_configs import get_scaled_lr
+                    active_config.LEARNING_RATE = get_scaled_lr(
+                        base_lr,
+                        64,
+                        EFFECTIVE_BATCH,
+                        'linear'
+                    )
+                    print(f"⚙️  Auto LR scaling (by batch): {base_lr:.6g} -> {active_config.LEARNING_RATE:.6g}")
+                except Exception:
+                    print("⚠️  Could not auto-scale LR; using base learning rate.")
     else:
         # Fallback: Manual configuration
         PER_STEP_BATCH = 128      # Physical batch per step (safe for L40S 24GB)

@@ -40,7 +40,30 @@ A100_ULTRA = {
     'gradient_accum_steps': 1,
     'effective_batch': 384,
     'num_workers': 8,
-    'description': '🚀 Fastest possible, ~2-3 hours. Requires LR adjustment (×1.5)'
+    'description': '🚀 Fastest possible, ~2-3 hours. Requires LR adjustment (×1.5)',
+    'auto_scale_lr': True,
+    'lr_multiplier': 1.5
+}
+
+# H100 presets
+H100_OPTIMAL = {
+    'name': 'H100 80GB Optimal',
+    'per_step_batch': 384,
+    'gradient_accum_steps': 1,
+    'effective_batch': 384,
+    'num_workers': 8,
+    'description': '✅ Great for H100, ~2-3 hours for full dataset'
+}
+
+H100_ULTRA = {
+    'name': 'H100 80GB Ultra-Fast',
+    'per_step_batch': 512,
+    'gradient_accum_steps': 1,
+    'effective_batch': 512,
+    'num_workers': 8,
+    'description': '🚀 Fastest possible on H100, ~1.5-2.5 hours. Requires LR adjustment (×2.0). ⚠️ May OOM on very large models, test first',
+    'auto_scale_lr': True,
+    'lr_multiplier': 2.0
 }
 
 # =============================================================================
@@ -99,7 +122,14 @@ if __name__ == "__main__":
     print("GPU CONFIGURATION PRESETS")
     print("="*80)
     
-    configs = [L40S_CONSERVATIVE, L40S_AGGRESSIVE, A100_OPTIMAL, A100_ULTRA]
+    configs = [
+        L40S_CONSERVATIVE,
+        L40S_AGGRESSIVE,
+        A100_OPTIMAL,
+        A100_ULTRA,
+        H100_OPTIMAL,
+        H100_ULTRA,
+    ]
     
     for cfg in configs:
         print(f"\n{cfg['name']}")
