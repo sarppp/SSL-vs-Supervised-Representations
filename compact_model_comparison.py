@@ -33,6 +33,15 @@ except ImportError as e:
     print(f"Python path: {sys.path}")
     sys.exit(1)
 
+# 🔧 OPTIONAL: GPU Configuration presets (comment out if not using)
+try:
+    from gpu_configs import L40S_CONSERVATIVE, A100_OPTIMAL
+    GPU_CONFIGS_AVAILABLE = True
+    print("✅ GPU configs imported - You can use preset configurations")
+except ImportError:
+    GPU_CONFIGS_AVAILABLE = False
+    print("ℹ️  GPU configs not found - Using manual configuration")
+
 SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
@@ -194,21 +203,52 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         base_config = config
     active_config = SimpleConfig(base_config)
     model_name = active_config.MODEL_NAME
+        # GPU-SPECIFIC SETTINGS:
+    # - A100 80GB: Use PER_STEP_BATCH=256, GRADIENT_ACCUM_STEPS=1 (no accumulation needed!)
+    # - L40S 24GB: Use PER_STEP_BATCH=128, GRADIENT_ACCUM_STEPS=2 (effective 256)
+    # 🚀 OPTIMIZED CONFIG: Large-scale training with 25k samples
+    # 
+    # 🎯 QUICK GPU SWITCHING: Uncomment the preset you want to use
+    # Choose ONE option below:
     
-    # Research-quality config overrides (not "fast testing"!)
-    BATCH_SIZE = 64  # Good for GPU memory
-    NUM_WORKERS = 12
+    # OPTION 1A: L40S 24GB (Safe) - ~7-8 hours
+    GPU_CONFIG = L40S_CONSERVATIVE if GPU_CONFIGS_AVAILABLE else None
+    
+    # OPTION 1B: A100 80GB (Optimal) - ~3-4 hours ⚡
+    # GPU_CONFIG = A100_OPTIMAL if GPU_CONFIGS_AVAILABLE else None
+    
+    # OPTION 1C: A100 80GB (Ultra-Fast) - ~2-3 hours 🚀 [Requires LR adjustment!]
+    # GPU_CONFIG = A100_ULTRA if GPU_CONFIGS_AVAILABLE else None
+    
+    if GPU_CONFIG is not None:
+        PER_STEP_BATCH = GPU_CONFIG['per_step_batch']
+        GRADIENT_ACCUM_STEPS = GPU_CONFIG['gradient_accum_steps']
+        EFFECTIVE_BATCH = GPU_CONFIG['effective_batch']
+        NUM_WORKERS = GPU_CONFIG['num_workers']
+        print(f"🔧 Using preset: {GPU_CONFIG['name']}")
+        print(f"📊 {GPU_CONFIG['description']}")
+    else:
+        # Fallback: Manual configuration
+        PER_STEP_BATCH = 128      # Physical batch per step (safe for L40S 24GB)
+        GRADIENT_ACCUM_STEPS = 2  # Accumulate 2 steps (effective batch 256)
+        EFFECTIVE_BATCH = 256     # Effective batch = 128 × 2 = 256
+        NUM_WORKERS = 8           # Optimal for most systems
+        print("ℹ️  Using manual GPU configuration")
     
     # Force override parameters - ensure these take precedence
     active_config.NUM_WORKERS = NUM_WORKERS
-    active_config.BATCH_SIZE = BATCH_SIZE
+    active_config.BATCH_SIZE = PER_STEP_BATCH  # Physical batch size
+    active_config.GRADIENT_ACCUM_STEPS = GRADIENT_ACCUM_STEPS
+    active_config.EFFECTIVE_BATCH_SIZE = EFFECTIVE_BATCH
     
     # DON'T override EPOCHS here - let regime-specific function handle it
     
     # Debug: Verify all overrides
     print(f"🔧 Config overrides:")
     print(f"   EPOCHS = {active_config.EPOCHS}")
-    print(f"   BATCH_SIZE = {active_config.BATCH_SIZE}")
+    print(f"   PER-STEP BATCH = {active_config.BATCH_SIZE}")
+    print(f"   GRADIENT ACCUM STEPS = {active_config.GRADIENT_ACCUM_STEPS}")
+    print(f"   EFFECTIVE BATCH = {active_config.EFFECTIVE_BATCH_SIZE}")
     print(f"   NUM_WORKERS = {active_config.NUM_WORKERS}")
     # Disable image pre-validation at runtime for faster experiments.  
     # Flip to True if you want to re-run the expensive corruption checks.
@@ -326,22 +366,61 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
                 raise ValueError(f"❌ Test size became 0! This is a critical bug. "
                                f"Sample size: {sample_size}, Train: {train_size}, Val: {val_size}")
             
-            # Sample train set
-            train_indices = np.random.choice(original_train_size, size=train_size, replace=False)
-            train_paths = [train_paths[i] for i in train_indices]
-            train_labels = [train_labels[i] for i in train_indices]
+            # 🔧 FIX: Stratified sampling to ensure ALL classes are represented
+            # (prevents KeyError when small samples miss some classes)
             
-            # Sample val set
-            val_indices = np.random.choice(original_val_size, size=val_size, replace=False)
-            val_paths = [val_paths[i] for i in val_indices]
-            val_labels = [val_labels[i] for i in val_indices]
+            def stratified_sample(paths, labels, target_size, random_state=42):
+                """Sample while ensuring all classes are represented"""
+                from collections import defaultdict
+                
+                # Group indices by class
+                class_indices = defaultdict(list)
+                for idx, label in enumerate(labels):
+                    class_indices[label].append(idx)
+                
+                unique_classes = list(class_indices.keys())
+                n_classes = len(unique_classes)
+                
+                # Calculate samples per class (ensure at least 1 per class)
+                samples_per_class = max(1, target_size // n_classes)
+                
+                rng = np.random.RandomState(random_state)
+                sampled_indices = []
+                
+                for class_label in unique_classes:
+                    indices = class_indices[class_label]
+                    n_take = min(samples_per_class, len(indices))
+                    selected = rng.choice(indices, n_take, replace=False)
+                    sampled_indices.extend(selected)
+                
+                # If we haven't reached target_size, add more samples
+                if len(sampled_indices) < target_size:
+                    remaining = target_size - len(sampled_indices)
+                    all_indices = list(range(len(paths)))
+                    unused = [i for i in all_indices if i not in sampled_indices]
+                    if unused:
+                        extra = rng.choice(unused, min(remaining, len(unused)), replace=False)
+                        sampled_indices.extend(extra)
+                
+                # Sample paths and labels
+                sampled_paths = [paths[i] for i in sampled_indices]
+                sampled_labels = [labels[i] for i in sampled_indices]
+                return sampled_paths, sampled_labels
             
-            # Sample test set
-            test_indices = np.random.choice(original_test_size, size=test_size, replace=False)
-            test_paths = [test_paths[i] for i in test_indices]
-            test_labels = [test_labels[i] for i in test_indices]
+            # Apply stratified sampling to each split
+            train_paths, train_labels = stratified_sample(train_paths, train_labels, train_size)
+            val_paths, val_labels = stratified_sample(val_paths, val_labels, val_size)
+            test_paths, test_labels = stratified_sample(test_paths, test_labels, test_size)
             
             print(f"   ✅ Pre-sampled {len(train_paths) + len(val_paths) + len(test_paths):,} paths before validation")
+        else:
+            # Using full dataset
+            print(f"   📊 FULL DATASET MODE:")
+            print(f"      Train: {original_train_size:,} samples")
+            print(f"      Val: {original_val_size:,} samples")
+            print(f"      Test: {original_test_size:,} samples")
+            print(f"      Total: {total_original:,} samples")
+            print(f"   ✅ Using complete dataset for research-quality training")
         
         # 🎯 TRUE FEW-SHOT: Hide labels instead of reducing dataset size
         labeled_samples_count = len(train_paths)
@@ -484,6 +563,12 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             'learning_rate': active_config.LEARNING_RATE,
             'weight_decay': getattr(active_config, 'WEIGHT_DECAY', 0.01),
             'dropout': getattr(active_config, 'DROPOUT', 0.1),
+            # Include evaluation metrics for thesis plots/tables if available
+            'precision_macro': float(test_result.get('precision_macro')) if test_result.get('precision_macro') is not None else None,
+            'recall_macro': float(test_result.get('recall_macro')) if test_result.get('recall_macro') is not None else None,
+            'f1_macro': float(test_result.get('f1_macro')) if test_result.get('f1_macro') is not None else None,
+            'matthews_corrcoef': float(test_result.get('matthews_corrcoef')) if test_result.get('matthews_corrcoef') is not None else None,
+            'roc_auc_ovr': float(test_result.get('roc_auc_ovr')) if test_result.get('roc_auc_ovr') is not None else None,
         }
         
         if comparison_logger:
@@ -538,12 +623,13 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
         model_name = original_model_name
     
     # 🔥 FAIR COMPETITION: Research-quality hyperparameters optimized for each strategy
+    # 📈 LEARNING RATE SCALING: Adjusted for effective batch 256 (4× from base batch 64)
     if training_regime == 'linear_probe':
         # Linear probe: freeze backbone, only train classifier head
         active_config.FREEZE_BACKBONE = True
         active_config.UNFREEZE_AFTER_EPOCH = 999  # Never unfreeze
-        active_config.EPOCHS = 5   # ✅ QUICK TEST: Reduced epochs (was 15)
-        active_config.LEARNING_RATE = 0.001  # Fair LR for all models in linear probe
+        active_config.EPOCHS = 5  # Linear probe: quick convergence (was 5 for testing) #15
+        active_config.LEARNING_RATE = 0.004  # 0.001 × 4 (linear scaling for batch 256)
         active_config.WEIGHT_DECAY = 0.01
         
         # Model-specific dropout (pre-trained features need less regularization)
@@ -557,9 +643,9 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
     elif training_regime == 'fine_tune':
         # Fine-tuning: progressive unfreezing (only for DiNO, but keeping general)
         active_config.FREEZE_BACKBONE = True
-        active_config.UNFREEZE_AFTER_EPOCH = 3   # ✅ QUICK TEST: Earlier unfreeze (was 5)
-        active_config.EPOCHS = 8   # ✅ QUICK TEST: Reduced epochs (was 25)
-        active_config.LEARNING_RATE = 0.0005  # Lower LR for stable fine-tuning
+        active_config.UNFREEZE_AFTER_EPOCH = 3   # ✅ Early unfreeze
+        active_config.EPOCHS = 8  # Fine-tuning: needs more epochs (was 8 for testing) 25
+        active_config.LEARNING_RATE = 0.002  # 0.0005 × 4 (linear scaling for batch 256)
         active_config.WEIGHT_DECAY = 0.01
         active_config.DROPOUT = 0.1  # Lower dropout for fine-tuning
             
@@ -568,18 +654,18 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
     else:  # supervised
         # Supervised: full training from scratch
         active_config.FREEZE_BACKBONE = False
-        active_config.EPOCHS = 8   # ✅ QUICK TEST: Reduced epochs (was 25)
+        active_config.EPOCHS = 8  # Supervised: full training from scratch 25
         active_config.WEIGHT_DECAY = 0.01
         
-        # Model-specific learning rates (fair but optimized)
+        # Model-specific learning rates (scaled for batch 256)
         if model_type == 'cnn':
-            active_config.LEARNING_RATE = 0.001   # Standard for CNNs
+            active_config.LEARNING_RATE = 0.004   # 0.001 × 4 (linear scaling)
             active_config.DROPOUT = 0.2           # Higher dropout for training from scratch
         elif model_type == 'vit':
-            active_config.LEARNING_RATE = 0.0008  # Slightly lower for ViTs
+            active_config.LEARNING_RATE = 0.0032  # 0.0008 × 4 (linear scaling)
             active_config.DROPOUT = 0.1           # ViT-appropriate dropout
         else:  # dinov2 supervised (theoretical case)
-            active_config.LEARNING_RATE = 0.0005  # Conservative for ViT architecture
+            active_config.LEARNING_RATE = 0.002   # 0.0005 × 4 (linear scaling)
             active_config.DROPOUT = 0.1
             
         print(f"🚀 Supervised: full training, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
@@ -742,6 +828,9 @@ def main():
     print("🚀 QUICK TEST MODE: 1000 samples, reduced epochs (~1-2 hours)")
     print("🔧 For full experiment: change SAMPLE_SIZE=10000, EPOCHS back to (15,25,25)")
     
+    # ⏱️ Track experiment time
+    start_time = time.time()
+    
     # Initialize comparison logger
     comparison_logger = ComparisonLogger()
     
@@ -754,9 +843,10 @@ def main():
     total_dataset_size = len(temp_train) + len(temp_val) + len(temp_test)
     
     # 📊 DATASET SIZE Configuration:
-    # SAMPLE_SIZE = 10000                            # Full experiment (9-13 hours)
-    # SAMPLE_SIZE = 1000                             # ✅ QUICK TEST: Small dataset (~1-2 hours)
-    SAMPLE_SIZE = 500                             # Even faster test
+    # SAMPLE_SIZE = 10000                            # Full experiment (12-15 hours with old batch 64)
+    # SAMPLE_SIZE = 4000                             # ✅ OPTIMIZED: ~6-7 hours with batch 256 + grad accum
+    # SAMPLE_SIZE = 1000                             # Quick test (~1.5 hours)
+    SAMPLE_SIZE = 500                             # Balanced: good results in <8 hours
     
     # 🎯 CRITICAL: Label efficiency analysis - how much labeled data is needed?
     LABEL_BUDGETS = [
@@ -948,7 +1038,9 @@ def main():
     
     print("="*80)
     
-    print_statistical_summary(aggregated_results)
+    # Statistical summary removed (only 1 seed, no variance to report)
+    # print_statistical_summary(aggregated_results)  # Uncomment if using 3+ seeds
+    
     end_time = time.time()
     print_experiment_console_summary(all_results, start_time, end_time)
 

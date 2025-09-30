@@ -11,16 +11,18 @@ from ..config import config_paths
 
 
 def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False, epoch=0, config_module=None, training_logger=None):
-    """Train for one epoch with debugging."""
+    """Train for one epoch with gradient accumulation support."""
     # Use default config if none provided (for backward compatibility)
     if config_module is None:
         import config as default_config
         config_module = default_config
-    
-    # Debug: Check what model actually is
+        # Debug: Check what model actually is
     # print(f"🔍 DEBUG: model type = {type(model)}")
     # print(f"🔍 DEBUG: model has train method = {hasattr(model, 'train')}")
     # print(f"🔍 DEBUG: model = {model}")
+    # 🔥 GRADIENT ACCUMULATION SETUP
+    gradient_accum_steps = getattr(config_module, 'GRADIENT_ACCUM_STEPS', 1)
+    effective_batch_size = getattr(config_module, 'EFFECTIVE_BATCH_SIZE', config_module.BATCH_SIZE)
     
     model.train()
     total_loss = 0
@@ -30,6 +32,8 @@ def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False
     # Debug info for first epoch
     if training_logger:
         training_logger.log_debug_info(train_loader, model, epoch)
+        if gradient_accum_steps > 1 and epoch == 0:
+            training_logger.logger.info(f"📈 Gradient accumulation: {gradient_accum_steps} steps, effective batch: {effective_batch_size}")
 
     # Create a single GradScaler per epoch (recommended) rather than one per batch
     scaler = GradScaler(enabled=use_amp and device.type == 'cuda')
@@ -57,20 +61,32 @@ def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False
         if training_logger:
             training_logger.log_batch_debug(images, labels, epoch, batch_idx)
 
-        optimizer.zero_grad()
+        # 🔥 GRADIENT ACCUMULATION: Only zero gradients at start of accumulation cycle
+        if batch_idx % gradient_accum_steps == 0:
+            optimizer.zero_grad()
 
         if use_amp:
             with autocast('cuda'):
                 outputs = model(images)
                 loss = criterion(outputs, labels)
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+            # Scale loss by accumulation steps for correct gradient averaging
+            scaled_loss = loss / gradient_accum_steps
+            scaler.scale(scaled_loss).backward()
+            
+            # Only step optimizer every N accumulation steps
+            if (batch_idx + 1) % gradient_accum_steps == 0:
+                scaler.step(optimizer)
+                scaler.update()
         else:
             outputs = model(images)
             loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+            # Scale loss by accumulation steps for correct gradient averaging
+            scaled_loss = loss / gradient_accum_steps
+            scaled_loss.backward()
+            
+            # Only step optimizer every N accumulation steps
+            if (batch_idx + 1) % gradient_accum_steps == 0:
+                optimizer.step()
 
         total_loss += loss.item()
         _, predicted = torch.max(outputs.data, 1)
@@ -96,8 +112,9 @@ def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False
                 )
 
         pbar.set_postfix({
-            'Loss': f'{loss.item():.4f}',
-            'Acc': f'{100.*correct/total:.1f}%' if total > 0 else 'N/A (no labels)'
+            'Loss': f'{loss.item():.4f}',  # Display original loss (not scaled)
+            'Acc': f'{100.*correct/total:.1f}%' if total > 0 else 'N/A (no labels)',
+            'EffBatch': f'{effective_batch_size}' if gradient_accum_steps > 1 else ''
         })
 
     final_acc = 100. * correct / total if total > 0 else 0.0

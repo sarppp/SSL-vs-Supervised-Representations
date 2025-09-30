@@ -88,46 +88,46 @@ class TrainingLogger:
         })
         
         self.logger.info("🚀 STARTING TRAINING SESSION")
-        self.logger.info(f"📊 Max epochs: {config_dict.get('EPOCHS', 'N/A')}")
-        self.logger.info(f"🛑 Early stopping patience: {config_dict.get('EARLY_STOPPING_PATIENCE', 'N/A')}")
-        self.logger.info(f"📁 Save directory: {config_dict.get('SAVE_DIR', 'N/A')}")
-        self.logger.info(f"📋 Batch size: {config_dict.get('BATCH_SIZE', 'N/A')}")
-        self.logger.info(f"📐 Image size: {config_dict.get('IMAGE_SIZE', 'N/A')}")
-        self.logger.info(f"🔖 Session ID: {self.session_id}")
-        self.logger.info(f"⏰ Started at: {self.session_start.strftime('%Y-%m-%d %H:%M:%S')}")
-        self.logger.info(f"📄 Log file: {self.log_filename}")
+        self.logger.info(f" Max epochs: {config_dict.get('EPOCHS', 'N/A')}")
+        self.logger.info(f" Early stopping patience: {config_dict.get('EARLY_STOPPING_PATIENCE', 'N/A')}")
+        self.logger.info(f" Save directory: {config_dict.get('SAVE_DIR', 'N/A')}")
+        self.logger.info(f" Batch size: {config_dict.get('BATCH_SIZE', 'N/A')}")
+        self.logger.info(f" Image size: {config_dict.get('IMAGE_SIZE', 'N/A')}")
+        self.logger.info(f" Session ID: {self.session_id}")
+        self.logger.info(f" Started at: {self.session_start.strftime('%Y-%m-%d %H:%M:%S')}")
+        self.logger.info(f" Log file: {self.log_filename}")
         
         # Dataset info
         if total_samples:
-            self.logger.info(f"📊 Dataset: Train={total_samples.get('train', 0)}, "
+            self.logger.info(f" Dataset: Train={total_samples.get('train', 0)}, "
                            f"Val={total_samples.get('val', 0)}, Test={total_samples.get('test', 0)}")
     
     def log_few_shot_info(self, mode: str, value: float, total_train_samples: int):
         """Log few-shot learning configuration."""
-        self.logger.info("🎯 FEW-SHOT LEARNING MODE ACTIVE")
-        self.logger.info(f"   📊 Mode: {mode}")
-        self.logger.info(f"   📈 Value: {value}")
-        self.logger.info(f"   🏷️ Training samples being used: {total_train_samples}")
+        self.logger.info(" FEW-SHOT LEARNING MODE ACTIVE")
+        self.logger.info(f"    Mode: {mode}")
+        self.logger.info(f"    Value: {value}")
+        self.logger.info(f"    Training samples being used: {total_train_samples}")
         
         if mode == 'percentage':
-            self.logger.info(f"   💡 Using {value*100:.1f}% of labeled training data")
+            self.logger.info(f"    Using {value*100:.1f}% of labeled training data")
             if value > 0:
                 estimated_total = int(total_train_samples / value)
-                self.logger.info(f"   🖼️ Estimated total available images: ~{estimated_total}")
+                self.logger.info(f"    Estimated total available images: ~{estimated_total}")
             else:
-                self.logger.info(f"   🚨 ZERO-SHOT MODE: No labeled samples for training")
+                self.logger.info(f"    ZERO-SHOT MODE: No labeled samples for training")
         elif mode == 'per_class':
-            self.logger.info(f"   💡 Using {value} labeled samples per class")
+            self.logger.info(f"    Using {value} labeled samples per class")
         
-        self.logger.info("   🔬 This simulates real-world scarce labeling scenario")
+        self.logger.info("    This simulates real-world scarce labeling scenario")
     
     def log_epoch_start(self, epoch: int, total_epochs: int):
         """Log epoch start."""
-        self.logger.info(f"\n🔄 Epoch {epoch+1}/{total_epochs}")
+        self.logger.info(f"\n Epoch {epoch+1}/{total_epochs}")
     
     def log_training_phase(self, phase: str):
         """Log training/validation phase."""
-        emoji = "📚" if phase == "training" else "🔍"
+        emoji = "" if phase == "training" else ""
         self.logger.info(f"{emoji} {phase.capitalize()}...")
     
     def log_epoch_results(self, epoch: int, train_loss: float, train_acc: float, 
@@ -142,9 +142,9 @@ class TrainingLogger:
         self.metrics_history['learning_rates'].append(lr)
         
         # Log results
-        self.logger.info(f"📊 Train: {train_loss:.4f} | {train_acc:.2f}%")
-        self.logger.info(f"📊 Val: {val_loss:.4f} | {val_acc:.2f}%")
-        self.logger.info(f"📈 LR: {lr:.6f}")
+        self.logger.info(f" Train: {train_loss:.4f} | {train_acc:.2f}%")
+        self.logger.info(f" Val: {val_loss:.4f} | {val_acc:.2f}%")
+        self.logger.info(f" LR: {lr:.6f}")
     
     def log_loss_trends(self, epoch: int):
         """Log loss trend analysis."""
@@ -157,10 +157,10 @@ class TrainingLogger:
         val_change = val_losses[-1] - val_losses[-2]
         train_change = train_losses[-1] - train_losses[-2]
         
-        val_trend = "📈" if val_change > 0 else "📉" if val_change < 0 else "➡️"
-        train_trend = "📈" if train_change > 0 else "📉" if train_change < 0 else "➡️"
+        val_trend = "" if val_change > 0 else "" if val_change < 0 else ""
+        train_trend = "" if train_change > 0 else "" if train_change < 0 else ""
         
-        self.logger.info(f"📊 Loss Trends: Train {train_losses[-2]:.4f}→{train_losses[-1]:.4f} {train_trend} | "
+        self.logger.info(f" Loss Trends: Train {train_losses[-2]:.4f}→{train_losses[-1]:.4f} {train_trend} | "
                         f"Val {val_losses[-2]:.4f}→{val_losses[-1]:.4f} {val_trend}")
         
         # Loss gap analysis
@@ -171,26 +171,26 @@ class TrainingLogger:
             gap_msg = "Train loss > Val loss (strong regularization)"
         else:
             gap_msg = "Normal"
-        self.logger.info(f"📏 Loss Gap: {loss_gap:.4f} ({gap_msg})")
+        self.logger.info(f" Loss Gap: {loss_gap:.4f} ({gap_msg})")
     
     def log_lr_change(self, old_lr: float, new_lr: float):
         """Log learning rate changes."""
         if new_lr < old_lr:
-            self.logger.info(f"📉 LR reduced: {old_lr:.6f} → {new_lr:.6f}")
+            self.logger.info(f" LR reduced: {old_lr:.6f} → {new_lr:.6f}")
     
     def log_early_stopping_warning(self, val_loss_increase: float, counter: int, patience: int):
         """Log early stopping warnings."""
-        self.logger.info(f"⚠️ Val loss increased by {val_loss_increase:.4f} "
+        self.logger.info(f" Val loss increased by {val_loss_increase:.4f} "
                         f"(Early stop counter: {counter}/{patience})")
     
     def log_best_model_saved(self, val_acc: Optional[float], filepath: str):
         """Log best model checkpoint."""
         val_acc = val_acc if val_acc is not None else 0.0
-        self.logger.info(f"🎉 New best: {val_acc:.2f}% - Saved to {filepath}")
+        self.logger.info(f" New best: {val_acc:.2f}% - Saved to {filepath}")
     
     def log_checkpoint_saved(self, filepath: str):
         """Log regular checkpoint save."""
-        self.logger.info(f"💾 Checkpoint saved: {filepath}")
+        self.logger.info(f" Checkpoint saved: {filepath}")
     
     def log_overfitting_warning(self, severity: str, train_acc: Optional[float], val_acc: Optional[float], 
                                train_loss: Optional[float] = None, val_loss: Optional[float] = None):
@@ -199,12 +199,12 @@ class TrainingLogger:
         val_acc = val_acc if val_acc is not None else 0.0
         acc_gap = train_acc - val_acc
         if severity == "severe":
-            self.logger.warning(f"⚠️ OVERFITTING WARNING (SEVERE): Train accuracy ({train_acc:.2f}%) "
+            self.logger.warning(f" OVERFITTING WARNING (SEVERE): Train accuracy ({train_acc:.2f}%) "
                               f"is {acc_gap:.2f}% higher than validation ({val_acc:.2f}%)")
             if train_loss is not None and val_loss is not None:
                 self.logger.warning(f"   Loss gap confirms: Train loss ({train_loss:.4f}) < Val loss ({val_loss:.4f})")
         elif severity == "moderate":
-            self.logger.warning(f"⚠️ OVERFITTING WARNING (MODERATE): Train accuracy ({train_acc:.2f}%) "
+            self.logger.warning(f" OVERFITTING WARNING (MODERATE): Train accuracy ({train_acc:.2f}%) "
                               f"is {acc_gap:.2f}% higher than validation ({val_acc:.2f}%)")
     
     def log_stability_warning(self, metric_type: str, prev_val: Optional[float], curr_val: Optional[float], jump: Optional[float]):
@@ -212,41 +212,41 @@ class TrainingLogger:
         prev_val = prev_val if prev_val is not None else 0.0
         curr_val = curr_val if curr_val is not None else 0.0
         jump = jump if jump is not None else 0.0
-        self.logger.warning(f"🚨 UNUSUAL {metric_type.upper()} JUMP: {prev_val:.1f}% → {curr_val:.1f}% "
+        self.logger.warning(f" UNUSUAL {metric_type.upper()} JUMP: {prev_val:.1f}% → {curr_val:.1f}% "
                           f"({jump:.1f}% jump!)")
         if metric_type == "train":
             self.logger.warning("   This might indicate: Data leakage, wrong transforms, or training issues")
     
     def log_early_stopping_triggered(self, epoch: int, patience: int, best_epoch: int):
         """Log early stopping trigger."""
-        self.logger.info(f"\n🛑 EARLY STOPPING triggered after {epoch+1} epochs")
-        self.logger.info(f"📉 No improvement in validation loss for {patience} epochs")
-        self.logger.info(f"🏆 Using best model from epoch {best_epoch + 1}")
+        self.logger.info(f"\n EARLY STOPPING triggered after {epoch+1} epochs")
+        self.logger.info(f" No improvement in validation loss for {patience} epochs")
+        self.logger.info(f" Using best model from epoch {best_epoch + 1}")
     
     def log_severe_overfitting_stop(self, train_acc: Optional[float], val_acc: Optional[float]):
         """Log severe overfitting early stop."""
         train_acc = train_acc if train_acc is not None else 0.0
         val_acc = val_acc if val_acc is not None else 0.0
-        self.logger.warning(f"\n🚨 SEVERE OVERFITTING DETECTED - STOPPING TRAINING")
-        self.logger.warning(f"📊 Train accuracy ({train_acc:.1f}%) significantly higher than validation ({val_acc:.1f}%)")
-        self.logger.warning(f"🛑 Stopping to prevent further overfitting")
+        self.logger.warning(f"\n SEVERE OVERFITTING DETECTED - STOPPING TRAINING")
+        self.logger.warning(f" Train accuracy ({train_acc:.1f}%) significantly higher than validation ({val_acc:.1f}%)")
+        self.logger.warning(f" Stopping to prevent further overfitting")
     
     def log_dinov2_unfreeze(self, epoch, old_lr: Optional[float], new_lr: Optional[float]):
         """Log DINOv2 backbone unfreezing."""
         old_lr = old_lr if old_lr is not None else 0.0
         new_lr = new_lr if new_lr is not None else 0.0
-        self.logger.info(f"🦖 UNFREEZING: DINOv2 backbone unfrozen at epoch {epoch + 1}")
-        self.logger.info(f"📉 LR reduced: {old_lr:.2e} → {new_lr:.2e}")
+        self.logger.info(f" UNFREEZING: DINOv2 backbone unfrozen at epoch {epoch + 1}")
+        self.logger.info(f" LR reduced: {old_lr:.2e} → {new_lr:.2e}")
 
     def log_amp_status(self, use_amp):
         """Log AMP (Automatic Mixed Precision) status."""
-        self.logger.info(f"⚡ AMP: {'Enabled' if use_amp else 'Disabled'}")
+        self.logger.info(f" AMP: {'Enabled' if use_amp else 'Disabled'}")
 
     def log_dinov2_detection(self, unfreeze_after=None):
         """Log DINOv2 model detection and unfreezing info."""
-        self.logger.info(f"🦖 DINOv2 model detected")
+        self.logger.info(f" DINOv2 model detected")
         if unfreeze_after is not None:
-            self.logger.info(f"🧊 Backbone will unfreeze after epoch {unfreeze_after}")
+            self.logger.info(f" Backbone will unfreeze after epoch {unfreeze_after}")
 
     def log_validation_warning(self, message):
         """Log general validation warnings."""
@@ -258,26 +258,26 @@ class TrainingLogger:
 
     def log_file_deleted(self, filename: str):
         """Log successful file deletion."""
-        self.logger.info(f"🗑️ Deleted: {filename}")
+        self.logger.info(f" Deleted: {filename}")
         """Log file deletion error."""
-        self.logger.error(f"❌ Failed to delete {filepath}: {error}")
+        self.logger.error(f" Failed to delete {filepath}: {error}")
 
     def log_file_kept(self, filename: str, file_type: str = ""):
         """Log file kept during cleanup."""
         prefix = f"{file_type} " if file_type else ""
-        self.logger.info(f"✅ Kept {prefix}file: {filename}")
+        self.logger.info(f" Kept {prefix}file: {filename}")
 
     def log_file_moved(self, filename: str, destination: str):
         """Log successful file move."""
-        self.logger.info(f"📦 Moved: {filename} → {destination}")
+        self.logger.info(f" Moved: {filename} → {destination}")
 
     def log_cleanup(self, deleted_files: List[str], kept_files: List[str], moved_files: List[Tuple[str, str]]):
         """Log checkpoint cleanup (legacy method for backward compatibility)."""
         self.log_cleanup_start()
         for file in deleted_files:
-            self.logger.info(f"🗑️ Deleted: {file}")
+            self.logger.info(f" Deleted: {file}")
         for file in kept_files:
-            self.logger.info(f"✅ Kept: {file}")
+            self.logger.info(f" Kept: {file}")
     
     def log_training_complete(self, best_val_acc: Optional[float], epochs_trained: int, 
                             training_time: str, best_model_path: str, results_file: str):
@@ -285,19 +285,19 @@ class TrainingLogger:
         best_val_acc = best_val_acc if best_val_acc is not None else 0.0
         session_end = datetime.datetime.now()
         
-        self.logger.info(f"\n✅ TRAINING COMPLETE!")
-        self.logger.info(f"🏆 Best validation accuracy: {best_val_acc:.2f}%")
-        self.logger.info(f"📊 Total epochs trained: {epochs_trained}")
-        self.logger.info(f"⏰ Training time: {training_time}")
-        self.logger.info(f"📅 Started: {self.session_start.strftime('%H:%M:%S')}")
-        self.logger.info(f"📅 Finished: {session_end.strftime('%H:%M:%S')}")
+        self.logger.info(f"\n TRAINING COMPLETE!")
+        self.logger.info(f" Best validation accuracy: {best_val_acc:.2f}%")
+        self.logger.info(f" Total epochs trained: {epochs_trained}")
+        self.logger.info(f" Training time: {training_time}")
+        self.logger.info(f" Started: {self.session_start.strftime('%H:%M:%S')}")
+        self.logger.info(f" Finished: {session_end.strftime('%H:%M:%S')}")
         
         if epochs_trained > 0:
             avg_time = (session_end - self.session_start).total_seconds() / epochs_trained
-            self.logger.info(f"⚡ Average time per epoch: {avg_time:.1f} seconds")
+            self.logger.info(f" Average time per epoch: {avg_time:.1f} seconds")
         
-        self.logger.info(f"📄 Log saved: {self.log_filename}")
-        self.logger.info(f"📊 Results saved: {results_file}")
+        self.logger.info(f" Log saved: {self.log_filename}")
+        self.logger.info(f" Results saved: {results_file}")
     
     def save_training_results(self, best_val_acc: Optional[float], best_model_path: str, 
                             final_model_path: str, epochs_trained: int, training_time: str) -> str:
@@ -338,13 +338,13 @@ class TrainingLogger:
         elif severity == "none":
             acc_gap = train_acc - val_acc
             if val_acc > train_acc + 2:
-                self.logger.info(f"✅ STRONG REGULARIZATION: Val ({val_acc:.1f}%) > Train ({train_acc:.1f}%) - Excellent generalization!")
+                self.logger.info(f" STRONG REGULARIZATION: Val ({val_acc:.1f}%) > Train ({train_acc:.1f}%) - Excellent generalization!")
             elif abs(acc_gap) <= 2:
-                self.logger.info(f"📊 Healthy gap: Train ({train_acc:.1f}%) vs Val ({val_acc:.1f}%)")
+                self.logger.info(f" Healthy gap: Train ({train_acc:.1f}%) vs Val ({val_acc:.1f}%)")
             else:
-                self.logger.info(f"📊 Large accuracy gap ({acc_gap:.1f}%) but loss pattern is normal - likely due to regularization")
+                self.logger.info(f" Large accuracy gap ({acc_gap:.1f}%) but loss pattern is normal - likely due to regularization")
         elif severity == "mild":
-            self.logger.info(f"📊 Moderate gap: Train ({train_acc:.1f}%) vs Val ({val_acc:.1f}%) - Monitor closely")
+            self.logger.info(f" Moderate gap: Train ({train_acc:.1f}%) vs Val ({val_acc:.1f}%) - Monitor closely")
 
     def log_stability_analysis(self, train_acc: Optional[float], val_acc: Optional[float], epoch: int, 
                               prev_train_acc: Optional[float] = None, prev_val_acc: Optional[float] = None, 
@@ -365,12 +365,12 @@ class TrainingLogger:
     def log_early_stopping_restore(self, best_epoch: int, best_loss: Optional[float]):
         """Log early stopping model restoration."""
         best_loss = best_loss if best_loss is not None else 0.0
-        self.logger.info(f"🔄 Restored model to epoch {best_epoch + 1} weights (best validation loss: {best_loss:.4f})")
+        self.logger.info(f" Restored model to epoch {best_epoch + 1} weights (best validation loss: {best_loss:.4f})")
 
     def log_debug_info(self, train_loader, model, epoch: int = 0):
         """Log debug information for training."""
         if epoch == 0:
-            self.logger.info(f"🔍 Debug Info:")
+            self.logger.info(f" Debug Info:")
             self.logger.info(f"   Training batches: {len(train_loader)}")
             self.logger.info(f"   Batch size: {train_loader.batch_size}")
             self.logger.info(f"   Model training mode: {model.training}")
@@ -443,9 +443,9 @@ class EvaluationLogger:
         """Log evaluation session start."""
         self.logger.info(f"\n🧪 EVALUATING MODEL ON TEST SET")
         self.logger.info("=" * 50)
-        self.logger.info("⚠️  This is the FIRST TIME the model sees test data!")
-        self.logger.info(f"📄 Evaluation log: {self.log_filename}")
-        self.logger.info(f"🎯 Few-shot training: {few_shot_enabled}")
+        self.logger.info("  This is the FIRST TIME the model sees test data!")
+        self.logger.info(f" Evaluation log: {self.log_filename}")
+        self.logger.info(f" Few-shot training: {few_shot_enabled}")
         
         if few_shot_enabled and config_dict:
             mode = config_dict.get('FEW_SHOT_MODE')
@@ -459,12 +459,12 @@ class EvaluationLogger:
     
     def log_test_accuracy(self, accuracy: float):
         """Log test accuracy."""
-        self.logger.info(f"🎯 TEST ACCURACY: {accuracy:.2f}%")
+        self.logger.info(f" TEST ACCURACY: {accuracy:.2f}%")
         self.logger.info("=" * 50)
     
     def log_class_balance_analysis(self, class_names: List[str], true_counts: Dict, pred_counts: Dict):
         """Log class balance analysis."""
-        self.logger.info(f"\n📊 CLASS BALANCE ANALYSIS")
+        self.logger.info(f"\n CLASS BALANCE ANALYSIS")
         self.logger.info("=" * 50)
         self.logger.info(f"📋 TRUE vs PREDICTED DISTRIBUTION:")
         self.logger.info(f"{'Class':<20} {'True Count':<12} {'Pred Count':<12} {'True %':<10} {'Pred %':<10} {'Difference'}")
@@ -484,7 +484,7 @@ class EvaluationLogger:
             
             status = ""
             if abs(difference) > 5:
-                status = "⚠️" if abs(difference) > 10 else "⚡"
+                status = "" if abs(difference) > 10 else ""
                 imbalance_detected = True
             
             self.logger.info(f"{class_name:<20} {true_count:<12} {pred_count:<12} {true_pct:<10.1f} {pred_pct:<10.1f} {difference:>+7.1f}% {status}")
@@ -492,16 +492,16 @@ class EvaluationLogger:
         self.logger.info("-" * 80)
         
         if imbalance_detected:
-            self.logger.warning("⚠️  PREDICTION IMBALANCE DETECTED!")
+            self.logger.warning("  PREDICTION IMBALANCE DETECTED!")
             self.logger.warning("   Some classes are over/under-predicted by >5%")
             self.logger.warning("   Consider adjusting class weights or data augmentation")
         else:
-            self.logger.info("✅ BALANCED PREDICTIONS!")
+            self.logger.info(" BALANCED PREDICTIONS!")
             self.logger.info("   Class weights appear to be working well")
     
     def log_per_class_accuracy(self, class_names: List[str], y_true, y_pred):
         """Log per-class accuracy with warnings."""
-        self.logger.info(f"\n🎯 PER-CLASS ACCURACY:")
+        self.logger.info(f"\n PER-CLASS ACCURACY:")
         self.logger.info("-" * 40)
         
         for i, class_name in enumerate(class_names):
@@ -512,13 +512,13 @@ class EvaluationLogger:
                 status = []
                 
                 if class_count < 20:
-                    status.append("⚠️ Very few samples (unreliable estimate)")
+                    status.append(" Very few samples (unreliable estimate)")
                 if class_acc == 100.0 and class_count < 100:
-                    status.append("⚠️ Possible overfitting (too perfect, few samples)")
+                    status.append(" Possible overfitting (too perfect, few samples)")
                 elif class_acc > 98.0 and class_count < 50:
-                    status.append("⚠️ Likely overfitting (very high, very few samples)")
+                    status.append(" Likely overfitting (very high, very few samples)")
                 if class_acc < 70.0:
-                    status.append("❗ Underfitting or class confusion")
+                    status.append(" Underfitting or class confusion")
                 
                 status_str = " ".join(status)
                 self.logger.info(f"{class_name:<25}: {class_acc:>6.1f}% ({class_count} samples) {status_str}")
@@ -527,11 +527,11 @@ class EvaluationLogger:
                               class_names: List[str], few_shot_enabled: bool, config_dict: Optional[Dict] = None, save_dir: Optional[str] = None):
         """Log evaluation summary."""
         self.logger.info(f"\n{'='*60}")
-        self.logger.info("🏁 TEST EVALUATION SUMMARY")
+        self.logger.info(" TEST EVALUATION SUMMARY")
         self.logger.info(f"{'='*60}")
-        self.logger.info(f"🤖 Model: {model_name}")
-        self.logger.info(f"🎯 Test Accuracy: {test_accuracy:.2f}%")
-        self.logger.info(f"🔬 Few-shot training: {few_shot_enabled}")
+        self.logger.info(f" Model: {model_name}")
+        self.logger.info(f" Test Accuracy: {test_accuracy:.2f}%")
+        self.logger.info(f" Few-shot training: {few_shot_enabled}")
         
         if few_shot_enabled and config_dict:
             mode = config_dict.get('FEW_SHOT_MODE')
@@ -541,10 +541,10 @@ class EvaluationLogger:
             else:
                 self.logger.info(f"   Trained with {value} samples/class")
         
-        self.logger.info(f"📊 Total Test Samples: {total_samples}")
-        self.logger.info(f"🏷️  Number of Classes: {len(class_names)}")
+        self.logger.info(f" Total Test Samples: {total_samples}")
+        self.logger.info(f"  Number of Classes: {len(class_names)}")
         if save_dir:
-            self.logger.info(f"💾 Results saved to: {save_dir}")
+            self.logger.info(f" Results saved to: {save_dir}")
         self.logger.info(f"{'='*60}")
     
     def save_evaluation_results(self, results_data: Dict) -> str:
@@ -554,7 +554,7 @@ class EvaluationLogger:
         with open(results_filename, 'w') as f:
             json.dump(results_data, f, indent=2, default=str)
         
-        self.logger.info(f"📊 Evaluation results saved: {results_filename}")
+        self.logger.info(f" Evaluation results saved: {results_filename}")
         return str(results_filename)
 
 
@@ -604,83 +604,83 @@ class ModelSetupLogger:
     
     def log_model_creation_start(self, model_name: str, model_id: str):
         """Log model creation start."""
-        self.logger.info(f"🤖 Creating {model_name} model...")
-        self.logger.info(f"🏷️  Model identifier: {model_id}")
+        self.logger.info(f" Creating {model_name} model...")
+        self.logger.info(f"  Model identifier: {model_id}")
     
     def log_model_config(self, model_name: str, model_config: Dict):
         """Log model-specific configuration."""
-        self.logger.info(f"📋 Using model-specific config for {model_name}")
+        self.logger.info(f" Using model-specific config for {model_name}")
         self.logger.info(f"   LR: {model_config.get('learning_rate', 'default')}")
         self.logger.info(f"   Batch: {model_config.get('batch_size', 'default')}")
         self.logger.info(f"   Dropout: {model_config.get('dropout', 'default')}")
     
     def log_dinov2_info(self, model_name: str, embed_dim: int, freeze_backbone: bool):
         """Log DINOv2 specific information."""
-        self.logger.info(f"🦖 Loading DINOv2 model: {model_name}")
-        self.logger.info(f"📐 DINOv2 embedding dimension: {embed_dim}")
+        self.logger.info(f" Loading DINOv2 model: {model_name}")
+        self.logger.info(f" DINOv2 embedding dimension: {embed_dim}")
         if freeze_backbone:
-            self.logger.info("🧊 Backbone frozen (will unfreeze later if specified)")
+            self.logger.info(" Backbone frozen (will unfreeze later if specified)")
         else:
-            self.logger.info("🔥 Backbone unfrozen from start")
+            self.logger.info(" Backbone unfrozen from start")
     
     def log_backbone_frozen(self):
         """Log backbone frozen status."""
-        self.logger.info("🧊 Backbone frozen (will unfreeze later if specified)")
+        self.logger.info(" Backbone frozen (will unfreeze later if specified)")
     
     def log_gradient_checkpointing(self, enabled: bool, success: bool = True, error: Optional[str] = None):
         """Log gradient checkpointing status."""
         if enabled:
             if success:
-                self.logger.info("✅ Gradient checkpointing enabled")
+                self.logger.info(" Gradient checkpointing enabled")
             else:
-                self.logger.info(f"⚠️  Could not enable gradient checkpointing: {error}")
+                self.logger.info(f" Could not enable gradient checkpointing: {error}")
         else:
             self.logger.info("⚠️  Gradient checkpointing not supported by this model")
     
     def log_model_compilation(self, success: bool, error: Optional[str] = None):
         """Log model compilation status."""
         if success:
-            self.logger.info("🚀 Model compiled for faster training")
+            self.logger.info(" Model compiled for faster training")
         elif error:
-            self.logger.info(f"⚠️  Model compilation failed: {error}")
-            self.logger.info("💡 Continuing without compilation...")
-        else:
-            self.logger.info("⚠️  torch.compile not available (requires PyTorch 2.0+)")
+            self.logger.info(f"  Model compilation failed: {error}")
+            self.logger.info(" Continuing without compilation...")
+        else:   
+            self.logger.info(" torch.compile not available (requires PyTorch 2.0+)")
     
     def log_model_creation_complete(self, model_name: str, num_classes: int):
         """Log model creation completion."""
-        self.logger.info(f"✅ {model_name} created with {num_classes} classes")
+        self.logger.info(f" {model_name} created with {num_classes} classes")
     
     def log_optimizer_creation(self, optimizer_name: str, params: Dict):
         """Log optimizer creation."""
-        self.logger.info(f"🎯 Creating {optimizer_name.upper()} optimizer with params: {params}")
+        self.logger.info(f" Creating {optimizer_name.upper()} optimizer with params: {params}")
     
     def log_scheduler_creation(self, scheduler_name: str, params: Dict, use_warmup: bool = False, warmup_info: Optional[Dict] = None):
         """Log scheduler creation."""
-        self.logger.info(f"📅 Creating {scheduler_name.upper()} scheduler with params: {params}")
+        self.logger.info(f" Creating {scheduler_name.upper()} scheduler with params: {params}")
         if use_warmup and warmup_info:
-            self.logger.info(f"🔥 Warmup enabled: {warmup_info['epochs']} epochs, {warmup_info['start_lr']} → {warmup_info['main_lr']}")
+            self.logger.info(f" Warmup enabled: {warmup_info['epochs']} epochs, {warmup_info['start_lr']} → {warmup_info['main_lr']}")
     
     def log_setup_complete(self, device: str, total_params: int, trainable_params: int, 
                           optimizer: str, scheduler: str, warmup_enabled: bool = False):
         """Log complete setup summary."""
-        self.logger.info(f"\n=== MODEL SETUP COMPLETE ===")
-        self.logger.info(f"📱 Device: {device}")
-        self.logger.info(f"📊 Total parameters: {total_params:,}")
-        self.logger.info(f"🎯 Trainable parameters: {trainable_params:,}")
-        self.logger.info(f"⚖️  Class weights: Enabled")
-        self.logger.info(f"🎯 Optimizer: {optimizer.upper()}")
-        self.logger.info(f"📅 Scheduler: {scheduler.upper()}")
+        self.logger.info(f"\n MODEL SETUP COMPLETE")
+        self.logger.info(f" Device: {device}")
+        self.logger.info(f" Total parameters: {total_params:,}")
+        self.logger.info(f" Trainable parameters: {trainable_params:,}")
+        self.logger.info(f" Class weights: Enabled")
+        self.logger.info(f" Optimizer: {optimizer.upper()}")
+        self.logger.info(f" Scheduler: {scheduler.upper()}")
         if warmup_enabled:
-            self.logger.info(f"🔥 Warmup: Enabled")
+            self.logger.info(f" Warmup: Enabled")
     
     def log_error(self, error_msg: str):
         """Log error messages."""
-        self.logger.error(f"❌ {error_msg}")
+        self.logger.error(f" {error_msg}")
     
     def log_warning(self, warning_msg: str):
         """Log warning messages."""
-        self.logger.warning(f"⚠️  {warning_msg}")
+        self.logger.warning(f"  {warning_msg}")
 
 
 class ComparisonLogger:
@@ -741,54 +741,54 @@ class ComparisonLogger:
             'start_time': self.experiment_start.isoformat()
         })
         
-        self.logger.info("🥊 STARTING MODEL COMPARISON EXPERIMENT")
+        self.logger.info(" STARTING MODEL COMPARISON EXPERIMENT")
         self.logger.info("=" * 60)
-        self.logger.info(f"🔖 Session ID: {self.session_id}")
-        self.logger.info(f"⏰ Started at: {self.experiment_start.strftime('%Y-%m-%d %H:%M:%S')}")
-        self.logger.info(f"📄 Log file: {self.log_filename}")
+        self.logger.info(f" Session ID: {self.session_id}")
+        self.logger.info(f" Started at: {self.experiment_start.strftime('%Y-%m-%d %H:%M:%S')}")
+        self.logger.info(f" Log file: {self.log_filename}")
         
         # Dataset info
         total_size = dataset_info.get('total_dataset_size', 0)
         sample_size = experiment_config.get('sample_size')
         if sample_size:
             percentage = (sample_size / total_size) * 100 if total_size > 0 else 0
-            self.logger.info(f"📊 Dataset: {sample_size:,} samples ({percentage:.1f}% of {total_size:,})")
+            self.logger.info(f" Dataset: {sample_size:,} samples ({percentage:.1f}% of {total_size:,})")
         else:
-            self.logger.info(f"📊 Dataset: Full dataset ({total_size:,} samples)")
+            self.logger.info(f" Dataset: Full dataset ({total_size:,} samples)")
         
         # Few-shot info
         few_shot_mode = experiment_config.get('few_shot_mode')
         if few_shot_mode:
             few_shot_value = experiment_config.get('few_shot_value')
-            self.logger.info(f"🎯 Few-shot: {few_shot_mode} ({few_shot_value}) - LABEL HIDING mode")
-            self.logger.info(f"   💡 Models see ALL images but only some have labels!")
+            self.logger.info(f" Few-shot: {few_shot_mode} ({few_shot_value}) - LABEL HIDING mode")
+            self.logger.info(f"    Models see ALL images but only some have labels!")
         else:
-            self.logger.info(f"🎯 Few-shot: Disabled (all images have labels)")
+            self.logger.info(f" Few-shot: Disabled (all images have labels)")
         
         # Models to compare
         models = experiment_config.get('models', [])
-        self.logger.info(f"🔧 Models to compare:")
+        self.logger.info(f" Models to compare:")
         for model_type, actual_name in models:
             self.logger.info(f"   {model_type.upper()}: {actual_name}")
     
     def log_model_start(self, model_type: str, model_name: str, config_info: Dict):
         """Log individual model training start."""
         self.logger.info(f"\n{'='*50}")
-        self.logger.info(f"🧪 TESTING {model_type.upper()}: {model_name}")
+        self.logger.info(f" TESTING {model_type.upper()}: {model_name}")
         self.logger.info(f"{'='*50}")
-        self.logger.info(f"⚙️  Epochs: {config_info.get('epochs', 'N/A')}")
-        self.logger.info(f"📋 Batch size: {config_info.get('batch_size', 'N/A')}")
-        self.logger.info(f"📐 Image size: {config_info.get('image_size', 'N/A')}")
-        self.logger.info(f"📈 Learning rate: {config_info.get('learning_rate', 'N/A')}")
+        self.logger.info(f" Epochs: {config_info.get('epochs', 'N/A')}")
+        self.logger.info(f" Batch size: {config_info.get('batch_size', 'N/A')}")
+        self.logger.info(f" Image size: {config_info.get('image_size', 'N/A')}")
+        self.logger.info(f" Learning rate: {config_info.get('learning_rate', 'N/A')}")
         
         # Few-shot specific info
         few_shot_mode = config_info.get('few_shot_mode')
         if few_shot_mode:
-            self.logger.info(f"🎯 Few-shot: {few_shot_mode} ({config_info.get('few_shot_value', 'N/A')})")
+            self.logger.info(f" Few-shot: {few_shot_mode} ({config_info.get('few_shot_value', 'N/A')})")
     
     def log_dataset_processing(self, model_type: str, original_sizes: Dict, final_sizes: Dict, few_shot_info: Optional[Dict] = None):
         """Log dataset processing information."""
-        self.logger.info(f"📊 Dataset processing for {model_type.upper()}:")
+        self.logger.info(f" Dataset processing for {model_type.upper()}:")
         self.logger.info(f"   Original: Train={original_sizes.get('train', 0):,}, "
                         f"Val={original_sizes.get('val', 0):,}, Test={original_sizes.get('test', 0):,}")
         self.logger.info(f"   Final: Train={final_sizes.get('train', 0):,}, "
@@ -798,31 +798,31 @@ class ComparisonLogger:
             labeled_samples = few_shot_info.get('labeled_samples', 0)
             total_samples = final_sizes.get('train', 0)
             if total_samples > 0:
-                self.logger.info(f"   🏷️  Labeled samples: {labeled_samples:,}/{total_samples:,} "
+                self.logger.info(f"    Labeled samples: {labeled_samples:,}/{total_samples:,} "
                                f"({labeled_samples/total_samples*100:.1f}%)")
     
     def log_model_complete(self, model_type: str, model_name: str, result: Dict):
         """Log individual model completion."""
         if result.get('success', False):
-            self.logger.info(f"\n✅ {model_type.upper()} TRAINING COMPLETE!")
-            self.logger.info(f"   🎯 Test Accuracy: {result.get('test_accuracy', 0):.2f}%")
-            self.logger.info(f"   📈 Best Val: {result.get('best_val_acc', 0):.2f}%")
-            self.logger.info(f"   ⏱️  Time: {result.get('time', 0):.1f}s")
+            self.logger.info(f"\n {model_type.upper()} TRAINING COMPLETE!")
+            self.logger.info(f"    Test Accuracy: {result.get('test_accuracy', 0):.2f}%")
+            self.logger.info(f"    Best Val: {result.get('best_val_acc', 0):.2f}%")
+            self.logger.info(f"    Time: {result.get('time', 0):.1f}s")
         else:
-            self.logger.error(f"\n❌ {model_type.upper()} TRAINING FAILED!")
-            self.logger.error(f"   💥 Error: {result.get('error', 'Unknown error')}")
+            self.logger.error(f"\n {model_type.upper()} TRAINING FAILED!")
+            self.logger.error(f"    Error: {result.get('error', 'Unknown error')}")
         
         # Always add result to model_results for proper counting
         self.model_results.append(result)
     
     def log_gpu_cleanup(self):
         """Log GPU memory cleanup."""
-        self.logger.info("🧹 Clearing GPU cache between models...")
+        self.logger.info(" Clearing GPU cache between models...")
     
     def log_comparison_results(self, results: List[Dict]):
         """Log final comparison results."""
         self.logger.info(f"\n{'='*60}")
-        self.logger.info("📊 COMPARISON RESULTS")
+        self.logger.info(" COMPARISON RESULTS")
         self.logger.info("=" * 60)
         
         successful_results = [r for r in results if r.get('success', False)]
@@ -830,11 +830,11 @@ class ComparisonLogger:
         
         # Log successful results
         for result in successful_results:
-            self.logger.info(f"\n🏆 {result['model_type'].upper()}: {result['model_name']}")
-            self.logger.info(f"   🎯 Train Accuracy: {result['train_accuracy']:.2f}%")
-            self.logger.info(f"   🎯 Test Accuracy: {result['test_accuracy']:.2f}%")
-            self.logger.info(f"   📈 Best Val: {result['best_val_acc']:.2f}%")
-            self.logger.info(f"   ⏱️  Time: {result['time']:.1f}s")
+            self.logger.info(f"\n {result['model_type'].upper()}: {result['model_name']}")
+            self.logger.info(f"    Train Accuracy: {result['train_accuracy']:.2f}%")
+            self.logger.info(f"    Test Accuracy: {result['test_accuracy']:.2f}%")
+            self.logger.info(f"    Best Val: {result['best_val_acc']:.2f}%")
+            self.logger.info(f"    Time: {result['time']:.1f}s")
             
             # Dataset info
             train_samples = result.get('train_samples', 0)
@@ -843,28 +843,28 @@ class ComparisonLogger:
             labeled_samples = result.get('labeled_samples', train_samples)
             
             if result.get('few_shot_mode'):
-                self.logger.info(f"   📊 Samples: {train_samples} total train ({labeled_samples} labeled), "
+                self.logger.info(f"    Samples: {train_samples} total train ({labeled_samples} labeled), "
                                f"{val_samples} val, {test_samples} test")
-                self.logger.info(f"   🎯 Label ratio: {labeled_samples}/{train_samples} "
+                self.logger.info(f"    Label ratio: {labeled_samples}/{train_samples} "
                                f"({labeled_samples/train_samples*100:.1f}%)")
             else:
-                self.logger.info(f"   📊 Samples: {train_samples} train, {val_samples} val, {test_samples} test")
+                self.logger.info(f"   Samples: {train_samples} train, {val_samples} val, {test_samples} test")
             
-            self.logger.info(f"   ⚙️  Config: batch_size={result.get('batch_size', 'N/A')}, "
+            self.logger.info(f"     Config: batch_size={result.get('batch_size', 'N/A')}, "
                            f"image_size={result.get('image_size', 'N/A')}, epochs={result.get('epochs', 'N/A')}")
             
             few_shot_info = 'Disabled' if result.get('few_shot_mode') is None else f"{result.get('few_shot_mode')} ({result.get('few_shot_value')})"
-            self.logger.info(f"   🎯 Few-shot: {few_shot_info}")
+            self.logger.info(f"   Few-shot: {few_shot_info}")
         
         # Log failed results
         for result in failed_results:
-            self.logger.error(f"\n💥 {result['model_type'].upper()}: FAILED")
-            self.logger.error(f"   ❌ Error: {result.get('error', 'Unknown error')}")
+            self.logger.error(f"\n {result['model_type'].upper()}: FAILED")
+            self.logger.error(f"    Error: {result.get('error', 'Unknown error')}")
         
         # Determine winner
         if successful_results:
             best = max(successful_results, key=lambda x: x.get('test_accuracy', 0))
-            self.logger.info(f"\n🏅 WINNER: {best['model_type'].upper()} ({best['test_accuracy']:.2f}%)")
+            self.logger.info(f"\n WINNER: {best['model_type'].upper()} ({best['test_accuracy']:.2f}%)")
             
             # Performance analysis
             if len(successful_results) >= 2:
@@ -872,12 +872,12 @@ class ComparisonLogger:
                 best_acc = sorted_results[0].get('test_accuracy', 0)
                 second_acc = sorted_results[1].get('test_accuracy', 0)
                 gap = best_acc - second_acc
-                self.logger.info(f"📊 Performance gap: {gap:.2f}% advantage")
+                self.logger.info(f" Performance gap: {gap:.2f}% advantage")
                 
                 if gap < 2:
-                    self.logger.info("💡 Results are very close - consider statistical significance")
+                    self.logger.info(" Results are very close - consider statistical significance")
                 elif gap > 10:
-                    self.logger.info("💡 Significant performance difference detected")
+                    self.logger.info(" Significant performance difference detected")
     
     def log_experiment_summary(self):
         """Log experiment completion summary."""
@@ -885,13 +885,13 @@ class ComparisonLogger:
         total_time = experiment_end - self.experiment_start
         
         self.logger.info(f"\n{'='*60}")
-        self.logger.info("🏁 EXPERIMENT COMPLETE")
+        self.logger.info(" EXPERIMENT COMPLETE")
         self.logger.info("=" * 60)
-        self.logger.info(f"⏰ Total experiment time: {total_time}")
-        self.logger.info(f"📊 Models tested: {len(self.model_results)}")
-        self.logger.info(f"✅ Successful: {len([r for r in self.model_results if r.get('success', False)])}")
-        self.logger.info(f"❌ Failed: {len([r for r in self.model_results if not r.get('success', False)])}")
-        self.logger.info(f"📄 Log saved: {self.log_filename}")
+        self.logger.info(f" Total experiment time: {total_time}")
+        self.logger.info(f" Models tested: {len(self.model_results)}")
+        self.logger.info(f" Successful: {len([r for r in self.model_results if r.get('success', False)])}")
+        self.logger.info(f" Failed: {len([r for r in self.model_results if not r.get('success', False)])}")
+        self.logger.info(f" Log saved: {self.log_filename}")
     
     def save_comparison_results(self, results: List[Dict]) -> str:
         """Save comparison results to JSON file."""
@@ -919,7 +919,7 @@ class ComparisonLogger:
         with open(results_file, 'w') as f:
             json.dump(comparison_data, f, indent=4)
         
-        self.logger.info(f"💾 Comparison results saved to: {results_file}")
+        self.logger.info(f" Comparison results saved to: {results_file}")
         return str(results_file)
 
 
@@ -969,36 +969,36 @@ class DataSplitterLogger:
     
     def log_dataset_loading(self, pickle_path: str, dataset_format: str, total_images: int, num_classes: Optional[int] = None, corrupted_count: int = 0):
         """Log dataset loading information."""
-        self.logger.info("📂 Loading clean dataset...")
-        self.logger.info(f"📋 Loaded {dataset_format} format dataset")
+        self.logger.info(" Loading clean dataset...")
+        self.logger.info(f" Loaded {dataset_format} format dataset")
         if num_classes:
-            self.logger.info(f"📋 Loaded dataset with {total_images:,} images, {num_classes} classes")
-            self.logger.info(f"📊 Removed {corrupted_count} corrupted images during cleaning")
+            self.logger.info(f" Loaded dataset with {total_images:,} images, {num_classes} classes")
+            self.logger.info(f" Removed {corrupted_count} corrupted images during cleaning")
     
     def log_path_conversion(self, base_data_dir: str, conversion_type: str = "relative"):
         """Log path conversion operations."""
         if conversion_type == "old_to_new":
-            self.logger.info(f"🔗 Converting old paths to new base: {base_data_dir}")
+            self.logger.info(f" Converting old paths to new base: {base_data_dir}")
         else:
-            self.logger.info(f"🔗 Converting relative paths using base: {base_data_dir}")
+            self.logger.info(f" Converting relative paths using base: {base_data_dir}")
     
     def log_split_configuration(self, train_size: float, val_size: float, test_size: float, total_images: int):
         """Log split configuration."""
-        self.logger.info(f"📁 Processing {total_images:,} clean images")
-        self.logger.info(f"📊 Target split: Train {train_size:.1%}, Val {val_size:.1%}, Test {test_size:.1%}")
+        self.logger.info(f" Processing {total_images:,} clean images")
+        self.logger.info(f" Target split: Train {train_size:.1%}, Val {val_size:.1%}, Test {test_size:.1%}")
     
     def log_stratification_warning(self, min_class_count: int):
         """Log stratification warnings."""
-        self.logger.warning(f"⚠️  WARNING: Some classes have very few samples (min: {min_class_count})")
+        self.logger.warning(f"  WARNING: Some classes have very few samples (min: {min_class_count})")
         self.logger.warning("    This may cause stratification issues.")
     
     def log_split_summary(self, train_count: int, val_count: int, test_count: int, total_images: int):
         """Log split summary."""
         self.logger.info(f"\n{'='*50}")
-        self.logger.info(f"📊 DATA SPLIT SUMMARY")
+        self.logger.info(f" DATA SPLIT SUMMARY")
         self.logger.info(f"{'='*50}")
-        self.logger.info(f"🖼️  Total images: {total_images:,}")
-        self.logger.info(f"🏷️  Total labels: {total_images:,} (All images have labels at this stage)")
+        self.logger.info(f"  Total images: {total_images:,}")
+        self.logger.info(f"  Total labels: {total_images:,} (All images have labels at this stage)")
         self.logger.info(f"Training:   {train_count:,} ({train_count/total_images*100:.1f}%)")
         self.logger.info(f"Validation: {val_count:,} ({val_count/total_images*100:.1f}%)")
         self.logger.info(f"Test:       {test_count:,} ({test_count/total_images*100:.1f}%)")
@@ -1006,14 +1006,14 @@ class DataSplitterLogger:
     def log_class_distribution_verification(self, total_classes: int, train_classes: int, val_classes: int, test_classes: int,
                                           missing_train: set, missing_val: set, missing_test: set):
         """Log class distribution verification."""
-        self.logger.info(f"\n📋 Class distribution verification:")
+        self.logger.info(f"\n Class distribution verification:")
         self.logger.info(f"Total classes: {total_classes}")
         self.logger.info(f"Train classes: {train_classes}")
         self.logger.info(f"Val classes:   {val_classes}")
         self.logger.info(f"Test classes:  {test_classes}")
         
         if missing_train or missing_val or missing_test:
-            self.logger.warning(f"\n⚠️  WARNING: Some classes missing from splits!")
+            self.logger.warning(f"\n  WARNING: Some classes missing from splits!")
             if missing_train:
                 self.logger.warning(f"   Missing from train: {missing_train}")
             if missing_val:
@@ -1021,11 +1021,11 @@ class DataSplitterLogger:
             if missing_test:
                 self.logger.warning(f"   Missing from test: {missing_test}")
         else:
-            self.logger.info(f"✅ All classes present in all splits!")
+            self.logger.info(f" All classes present in all splits!")
     
     def log_per_class_distribution(self, all_classes: List[str], train_dist: Dict, val_dist: Dict, test_dist: Dict, show_limit: int = 5):
         """Log per-class distribution details."""
-        self.logger.info(f"\n📈 Per-class split verification (first {show_limit} classes):")
+        self.logger.info(f"\n Per-class split verification (first {show_limit} classes):")
         
         for i, class_name in enumerate(sorted(all_classes)):
             if i >= show_limit:
@@ -1046,49 +1046,49 @@ class DataSplitterLogger:
     def log_data_inspection(self, train_paths: List[str], train_labels: List[str], val_paths: List[str], test_paths: List[str]):
         """Log quick data inspection."""
         total_classes = len(set(train_labels + []))  # Simplified for train labels only
-        self.logger.info(f"📊 Total: Train={len(train_paths)}, Val={len(val_paths)}, Test={len(test_paths)}")
-        self.logger.info(f"📁 Sample paths:")
+        self.logger.info(f" Total: Train={len(train_paths)}, Val={len(val_paths)}, Test={len(test_paths)}")
+        self.logger.info(f" Sample paths:")
         for i in range(min(2, len(train_paths))):
             path_exists = os.path.exists(train_paths[i]) if train_paths else False
             self.logger.info(f"   {train_labels[i] if train_labels else 'N/A'}: {train_paths[i] if train_paths else 'N/A'} - Exists: {path_exists}")
-        self.logger.info(f"🏷️  Classes: {total_classes} total")
-        self.logger.info(f"\n✅ Dataset split completed successfully!")
+        self.logger.info(f"  Classes: {total_classes} total")
+        self.logger.info(f"\n Dataset split completed successfully!")
     
     def log_few_shot_disabled(self, total_count: int):
         """Log few-shot learning disabled."""
-        self.logger.info(f"\n📊 FEW-SHOT LEARNING: DISABLED")
-        self.logger.info(f"   🖼️  Using all available training data: {total_count} samples")
-        self.logger.info(f"   🖼️  Total training images: {total_count}")
-        self.logger.info(f"   🏷️  Images with labels: {total_count} (100%)")
-        self.logger.info(f"   ❓ Images without labels: 0 (0%)")
+        self.logger.info(f"\n FEW-SHOT LEARNING: DISABLED")
+        self.logger.info(f"     Using all available training data: {total_count} samples")
+        self.logger.info(f"     Total training images: {total_count}")
+        self.logger.info(f"     Images with labels: {total_count} (100%)")
+        self.logger.info(f"    Images without labels: 0 (0%)")
     
     def log_few_shot_enabled(self, mode: str, value: float):
         """Log few-shot learning enabled."""
-        self.logger.info(f"\n📊 FEW-SHOT LEARNING: ACTIVATED")
-        self.logger.info(f"   🎯 Mode: {mode} = {value}")
+        self.logger.info(f"\n FEW-SHOT LEARNING: ACTIVATED")
+        self.logger.info(f"    Mode: {mode} = {value}")
         if mode == 'percentage':
-            self.logger.info(f"   💡 Using {value*100:.1f}% of labeled training data")
+            self.logger.info(f"    Using {value*100:.1f}% of labeled training data")
         elif mode == 'per_class':
-            self.logger.info(f"   💡 Using {value} labeled samples per class")
+            self.logger.info(f"    Using {value} labeled samples per class")
     
     def log_few_shot_results(self, original_count: int, labeled_count: int, class_counts: Dict):
         """Log few-shot learning results."""
         unlabeled_count = original_count - labeled_count
-        self.logger.info(f"📊 FEW-SHOT SIMULATION RESULTS:")
-        self.logger.info(f"   🖼️  Total images available: {original_count}")
-        self.logger.info(f"   🏷️  Images with labels: {labeled_count} ({labeled_count/original_count*100:.1f}%)")
-        self.logger.info(f"   ❓ Images without labels: {unlabeled_count} ({unlabeled_count/original_count*100:.1f}%)")
-        self.logger.info(f"   💡 This simulates real-world scenario: abundant images, scarce labels")
-        self.logger.info(f"📈 Class distribution of LABELED data:")
+        self.logger.info(f" FEW-SHOT SIMULATION RESULTS:")
+        self.logger.info(f"     Total images available: {original_count}")
+        self.logger.info(f"     Images with labels: {labeled_count} ({labeled_count/original_count*100:.1f}%)")
+        self.logger.info(f"    Images without labels: {unlabeled_count} ({unlabeled_count/original_count*100:.1f}%)")
+        self.logger.info(f"    This simulates real-world scenario: abundant images, scarce labels")
+        self.logger.info(f" Class distribution of LABELED data:")
         for class_name, count in sorted(class_counts.items()):
             self.logger.info(f"   {class_name}: {count} labeled samples")
     
     def log_path_conversion_warning(self, old_path: str, base_dir_name: str):
         """Log path conversion warnings."""
-        self.logger.warning(f"⚠️  Base directory '{base_dir_name}' not found in path: {old_path}")
+        self.logger.warning(f"  Base directory '{base_dir_name}' not found in path: {old_path}")
         self.logger.warning("    Using original path - this may cause file not found errors")
     
     def log_path_conversion_error(self, old_path: str, error: str):
         """Log path conversion errors."""
-        self.logger.error(f"❌ Error parsing path '{old_path}': {error}")
+        self.logger.error(f" Error parsing path '{old_path}': {error}")
         self.logger.error("    Using original path as fallback")
