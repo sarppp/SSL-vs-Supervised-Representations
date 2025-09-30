@@ -561,12 +561,21 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         # Get the best model path from training results
         best_model_path = train_result.get('best_model_path', None)
         
+        # Compute throughput (images/sec) and record GPU preset info when available
+        total_train_images = train_size_actual
+        total_time_sec = end_time - start_time
+        images_per_sec = (total_train_images * active_config.EPOCHS) / total_time_sec if total_time_sec > 0 else None
+        gpu_preset_name = GPU_CONFIG['name'] if 'GPU_CONFIG' in locals() and GPU_CONFIG is not None else 'manual'
+        
         result = {
             'model_type': model_type,
             'model_name': current_model_name,  # Use experiment-specific name
             'original_model_name': model_name,  # Keep original for reference
             'success': True,
             'time': end_time - start_time,
+            'time_per_epoch': (end_time - start_time) / active_config.EPOCHS if active_config.EPOCHS else None,
+            'images_per_sec': images_per_sec,
+            'gpu_preset': gpu_preset_name,
             'train_accuracy': train_result.get('train_accuracies', [0])[-1],  # Get final training accuracy
             'test_accuracy': test_result['test_accuracy'],
             'best_val_acc': train_result.get('best_val_acc', 0),

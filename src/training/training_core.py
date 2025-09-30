@@ -251,6 +251,9 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
         str(total_training_time)
     )
     
+    # Auto-save training/LR curves for thesis plots
+    training_logger.save_training_curves()
+    
     # Log training completion
     training_logger.log_training_complete(
         best_val_acc, 

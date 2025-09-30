@@ -60,7 +60,10 @@ def create_summary_table(results):
             'ROC-AUC': f"{result.get('roc_auc_ovr', 0):.3f}" if result.get('roc_auc_ovr') else 'N/A',
             'Train Samples': result.get('labeled_samples', 0),
             'Epochs': result.get('epochs', 0),
-            'Time (min)': f"{result.get('time', 0)/60:.1f}"
+            'Time (min)': f"{result.get('time', 0)/60:.1f}",
+            'Time/Epoch (s)': f"{result.get('time_per_epoch', 0):.1f}",
+            'Images/sec': f"{result.get('images_per_sec', 0):.1f}",
+            'GPU Preset': result.get('gpu_preset', 'N/A')
         }
         summary_data.append(row)
     
@@ -223,6 +226,44 @@ def plot_model_comparison_bar(results, output_dir='outputs/plots'):
 
     return png_path
 
+def compute_label_efficiency_metrics(results, low_budget_threshold=0.1):
+    """Compute AULC (<= low_budget_threshold) and label savings numbers."""
+    # Organize accuracy vs budget by (model, regime)
+    curves = {}
+    for r in results:
+        if not r.get('success', False):
+            continue
+        key = f"{r['model_type'].upper()} ({r.get('training_regime', 'N/A')})"
+        curves.setdefault(key, []).append((r.get('budget_value', 0.0), r.get('test_accuracy', 0.0)))
+    for k in curves:
+        curves[k] = sorted(curves[k])
+
+    import numpy as np
+    def aulc(points, max_budget=0.1):
+        xs = [x for x,_ in points if x <= max_budget]
+        ys = [y for x,y in points if x <= max_budget]
+        if len(xs) < 2:
+            return None
+        return float(np.trapz(ys, xs))
+
+    # Compute for all keys
+    aulc_by_key = {k: aulc(v, low_budget_threshold) for k, v in curves.items()}
+    return aulc_by_key
+
+def append_efficiency_summary_to_executive(results, output_file='outputs/executive_summary.txt', low_budget_threshold=0.1):
+    """Append AULC summary to the existing executive summary file."""
+    aulc_by_key = compute_label_efficiency_metrics(results, low_budget_threshold)
+    lines = ["\nAULC (<= {:.0f}% labels):".format(low_budget_threshold*100)]
+    for k, v in sorted(aulc_by_key.items()):
+        if v is not None:
+            lines.append(f"- {k}: {v:.2f}")
+    try:
+        with open(output_file, 'a') as f:
+            f.write("\n" + "\n".join(lines) + "\n")
+        print("📝 Added AULC summary to:", output_file)
+    except Exception as e:
+        print("⚠️ Could not append AULC summary:", e)
+
 def generate_executive_summary(results, output_file='outputs/executive_summary.txt'):
     """Generate executive summary for thesis"""
     
@@ -344,6 +385,8 @@ def main():
     # 4. Executive summary
     print("\n Generating executive summary...")
     generate_executive_summary(results)
+    # Append AULC summary (<=10% by default) to executive summary
+    append_efficiency_summary_to_executive(results)
     
     print("\n" + "="*70)
     print(" THESIS MATERIALS GENERATED SUCCESSFULLY!")

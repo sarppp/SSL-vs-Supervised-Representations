@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any, List, Tuple
 from pathlib import Path
 import json
 import numpy as np
+import matplotlib.pyplot as plt
 
 # Use centralized path constants to avoid duplication
 from src.config.config_paths import (
@@ -327,6 +328,59 @@ class TrainingLogger:
             json.dump(results, f, indent=2, default=str)
         
         return str(results_file)
+
+    def save_training_curves(self):
+        """Render and save training curves (loss, accuracy, learning rate)."""
+        try:
+            plots_dir = Path(OUTPUTS_DIR) / 'plots'
+            plots_dir.mkdir(parents=True, exist_ok=True)
+
+            epochs = [e + 1 for e in self.metrics_history.get('epochs', [])]
+            # Fallback if epochs list wasn't populated
+            if not epochs:
+                num_epochs = len(self.metrics_history.get('train_losses', []))
+                epochs = list(range(1, num_epochs + 1))
+
+            # Loss curves
+            if self.metrics_history.get('train_losses') and self.metrics_history.get('val_losses'):
+                plt.figure(figsize=(7, 4))
+                plt.plot(epochs, self.metrics_history['train_losses'], label='Train')
+                plt.plot(epochs, self.metrics_history['val_losses'], label='Val')
+                plt.xlabel('Epoch')
+                plt.ylabel('Loss')
+                plt.title('Loss vs Epoch')
+                plt.legend()
+                plt.tight_layout()
+                plt.savefig(plots_dir / f'{self.model_name}_loss_curve.png', dpi=300, bbox_inches='tight')
+                plt.close()
+
+            # Accuracy curves
+            if self.metrics_history.get('train_accuracies') and self.metrics_history.get('val_accuracies'):
+                plt.figure(figsize=(7, 4))
+                plt.plot(epochs, self.metrics_history['train_accuracies'], label='Train')
+                plt.plot(epochs, self.metrics_history['val_accuracies'], label='Val')
+                plt.xlabel('Epoch')
+                plt.ylabel('Accuracy (%)')
+                plt.title('Accuracy vs Epoch')
+                plt.legend()
+                plt.tight_layout()
+                plt.savefig(plots_dir / f'{self.model_name}_accuracy_curve.png', dpi=300, bbox_inches='tight')
+                plt.close()
+
+            # Learning rate curve
+            if self.metrics_history.get('learning_rates'):
+                plt.figure(figsize=(7, 4))
+                plt.plot(epochs, self.metrics_history['learning_rates'])
+                plt.xlabel('Epoch')
+                plt.ylabel('Learning Rate')
+                plt.title('Learning Rate Schedule')
+                plt.tight_layout()
+                plt.savefig(plots_dir / f'{self.model_name}_lr_curve.png', dpi=300, bbox_inches='tight')
+                plt.close()
+
+            self.logger.info(f" Training curves saved to: {plots_dir}")
+        except Exception as e:
+            self.logger.warning(f" Could not save training curves: {e}")
     
     def log_overfitting_analysis(self, severity: str, train_acc: Optional[float], val_acc: Optional[float], 
                                 train_loss: Optional[float] = None, val_loss: Optional[float] = None):
