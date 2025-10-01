@@ -23,9 +23,16 @@ ensure_directories()
 class TrainingLogger:
     """Centralized logging for training sessions with structured output."""
     
-    def __init__(self, model_name: str, timestamp: Optional[str] = None):
-        self.model_name = model_name
-        self.session_id = f"{model_name}"
+    def __init__(self, model_identifier: str, timestamp: Optional[str] = None, model_name: str = None):
+        """Initialize TrainingLogger.
+        
+        Args:
+            model_identifier: Full model identifier including training config (e.g., "dinov2_vitb14_fine_tune_labels10pct")
+            timestamp: Optional timestamp for the session
+            model_name: Optional base model name (for backward compatibility)
+        """
+        self.model_name = model_name or model_identifier  # Keep base model name for compatibility
+        self.session_id = model_identifier
         
         # Setup directories using shared config paths for consistency
         self.log_dir = Path(LOGS_DIR)
@@ -358,7 +365,8 @@ class TrainingLogger:
                 suffix = ""
                 regime_suffix = ""
 
-            base = f"{self.model_name}{regime_suffix}{suffix}"
+            # Use session_id (full identifier) for plots - no need to add suffixes again
+            base = self.session_id
 
             epochs = [e + 1 for e in self.metrics_history.get('epochs', [])]
             # Fallback if epochs list wasn't populated
@@ -373,7 +381,7 @@ class TrainingLogger:
                 plt.plot(epochs, self.metrics_history['val_losses'], label='Val')
                 plt.xlabel('Epoch')
                 plt.ylabel('Loss')
-                plt.title('Loss vs Epoch')
+                plt.title(f'Loss vs Epoch — {self.session_id}')
                 plt.legend()
                 plt.tight_layout()
                 plt.savefig(plots_dir / f'{base}_loss_curve.png', dpi=300, bbox_inches='tight')
@@ -386,7 +394,7 @@ class TrainingLogger:
                 plt.plot(epochs, self.metrics_history['val_accuracies'], label='Val')
                 plt.xlabel('Epoch')
                 plt.ylabel('Accuracy (%)')
-                plt.title('Accuracy vs Epoch')
+                plt.title(f'Accuracy vs Epoch — {self.session_id}')
                 plt.legend()
                 plt.tight_layout()
                 plt.savefig(plots_dir / f'{base}_accuracy_curve.png', dpi=300, bbox_inches='tight')
@@ -398,7 +406,7 @@ class TrainingLogger:
                 plt.plot(epochs, self.metrics_history['learning_rates'])
                 plt.xlabel('Epoch')
                 plt.ylabel('Learning Rate')
-                plt.title('Learning Rate Schedule')
+                plt.title(f'Learning Rate Schedule — {self.session_id}')
                 plt.tight_layout()
                 plt.savefig(plots_dir / f'{base}_lr_curve.png', dpi=300, bbox_inches='tight')
                 plt.close()
@@ -474,9 +482,16 @@ class TrainingLogger:
 class EvaluationLogger:
     """Centralized logger for model evaluation."""
     
-    def __init__(self, model_name: str, timestamp: Optional[str] = None):
-        self.model_name = model_name
-        self.session_id = f"{model_name}"
+    def __init__(self, model_identifier: str, timestamp: Optional[str] = None, model_name: str = None):
+        """Initialize EvaluationLogger.
+        
+        Args:
+            model_identifier: Full model identifier including training config
+            timestamp: Optional timestamp for the session
+            model_name: Optional base model name (for backward compatibility)
+        """
+        self.model_name = model_name or model_identifier
+        self.session_id = model_identifier
         
         # Setup directories using shared config paths for consistency
         self.log_dir = Path(LOGS_DIR)
@@ -639,9 +654,16 @@ class EvaluationLogger:
 class ModelSetupLogger:
     """Logger for model setup phase."""
     
-    def __init__(self, model_name: str, timestamp: Optional[str] = None):
-        self.model_name = model_name
-        self.session_id = f"{model_name}"
+    def __init__(self, model_identifier: str, timestamp: Optional[str] = None, model_name: str = None):
+        """Initialize ModelSetupLogger.
+        
+        Args:
+            model_identifier: Full model identifier including training config
+            timestamp: Optional timestamp for the session
+            model_name: Optional base model name (for backward compatibility)
+        """
+        self.model_name = model_name or model_identifier
+        self.session_id = model_identifier
         
         # Setup directories using shared config paths for consistency
         self.log_dir = Path(LOGS_DIR)
@@ -711,7 +733,8 @@ class ModelSetupLogger:
             if success:
                 self.logger.info(" Gradient checkpointing enabled")
             else:
-                self.logger.info(f" Could not enable gradient checkpointing: {error}")
+                error_msg = error if error else "Unknown error"
+                self.logger.info(f" Could not enable gradient checkpointing: {error_msg}")
         else:
             self.logger.info("⚠️  Gradient checkpointing not supported by this model")
     
@@ -941,12 +964,12 @@ class ComparisonLogger:
         
         # Determine winner
         if successful_results:
-            best = max(successful_results, key=lambda x: x.get('test_accuracy', 0))
+            best = max(successful_results, key=lambda x: float(x.get('test_accuracy', 0) or 0))
             self.logger.info(f"\n WINNER: {best['model_type'].upper()} ({best['test_accuracy']:.2f}%)")
             
             # Performance analysis
             if len(successful_results) >= 2:
-                sorted_results = sorted(successful_results, key=lambda x: x.get('test_accuracy', 0), reverse=True)
+                sorted_results = sorted(successful_results, key=lambda x: float(x.get('test_accuracy', 0) or 0), reverse=True)
                 best_acc = sorted_results[0].get('test_accuracy', 0)
                 second_acc = sorted_results[1].get('test_accuracy', 0)
                 gap = best_acc - second_acc
@@ -986,7 +1009,7 @@ class ComparisonLogger:
                 'total_models': len(results),
                 'successful_models': len([r for r in results if r.get('success', False)]),
                 'failed_models': len([r for r in results if not r.get('success', False)]),
-                'winner': max(results, key=lambda x: x.get('test_accuracy', 0)) if results else None
+                'winner': max(results, key=lambda x: float(x.get('test_accuracy', 0) or 0)) if results else None
             },
             'files': {
                 'log_file': str(self.log_filename)

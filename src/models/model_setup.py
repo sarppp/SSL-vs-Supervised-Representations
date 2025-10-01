@@ -7,7 +7,18 @@ from ..utils.logger_manager import ModelSetupLogger
 from ..config import config_paths
 
 def get_model_identifier(model_name=None, config=None):
-    """Generate a unique model identifier to prevent conflicts between model types."""
+    """Generate a unique model identifier to prevent conflicts between model types.
+    
+    The identifier includes:
+    - Model family and variant
+    - Training strategy (fine_tune/freeze/full_train)
+    - Label percentage (few-shot learning)
+    
+    Examples:
+    - dinov2_vitb14_fine_tune_labels10pct
+    - efficientnet_b4_freeze_labels100pct
+    - vit_base_patch16_224_full_train_labels50pct
+    """
     if config is None:
         raise ValueError("You must provide a config module!")
     model_name = model_name or config.MODEL_NAME
@@ -15,38 +26,56 @@ def get_model_identifier(model_name=None, config=None):
     # Create model family identifier to avoid conflicts
     if model_name.startswith('dinov2'):
         variant = model_name.replace('dinov2_', '')
-        base_id = f"dino_{variant}"
+        base_id = f"dinov2_{variant}"
     elif model_name.startswith('efficientnet'):
         variant = model_name.replace('efficientnet_', '')
-        base_id = f"cnn_{variant}"
+        base_id = f"efficientnet_{variant}"
     elif model_name.startswith('vit_'):
-        if 'tiny' in model_name:
-            variant = 'T'
-        elif 'small' in model_name:
-            variant = 'S'
-        elif 'base' in model_name:
-            variant = 'B'
-        elif 'large' in model_name:
-            variant = 'L'
-        else:
-            variant = model_name.replace('vit_', '').split('_')[0]
-        base_id = f"vit_{variant}"
+        # Keep full vit name for clarity
+        base_id = model_name
     elif model_name.startswith('resnet'):
-        variant = model_name.replace('resnet', '')
-        base_id = f"cnn_resnet{variant}"
+        base_id = model_name
     else:
-        base_id = f"cnn_{model_name}"
+        base_id = model_name
 
+    # Determine training strategy (honor explicit TRAINING_REGIME when provided)
+    explicit_regime = getattr(config, 'TRAINING_REGIME', None)
+    freeze_backbone = getattr(config, 'FREEZE_BACKBONE', False)
+    unfreeze_after_epoch = getattr(config, 'UNFREEZE_AFTER_EPOCH', None)
+    
+    if isinstance(explicit_regime, str) and explicit_regime.strip():
+        # Normalize common names
+        regime = explicit_regime.lower()
+        if regime in ["linear_probe", "linearprobe", "probe", "frozen"]:
+            strategy = "linear_probe"
+        elif regime in ["fine_tune", "finetune", "fine"]:
+            strategy = "fine_tune"
+        elif regime in ["supervised", "full", "full_train", "end_to_end"]:
+            strategy = "full_train"
+        else:
+            # Fallback to heuristic below if unrecognized
+            strategy = None
+    else:
+        strategy = None
+    
+    if strategy is None:
+        if freeze_backbone and unfreeze_after_epoch is not None and unfreeze_after_epoch > 0:
+            strategy = "fine_tune"  # Starts frozen, then unfreezes
+        elif freeze_backbone:
+            strategy = "freeze"  # Always frozen
+        else:
+            strategy = "full_train"  # Never frozen
+    
     # Add few-shot label for data subset identification
     few_shot_mode = getattr(config, 'FEW_SHOT_MODE', None)
     if few_shot_mode == 'percentage':
         few_shot_value = getattr(config, 'FEW_SHOT_VALUE', 1.0)
         percentage = int(few_shot_value * 100)
-        label = f"label_{percentage}"
     else:
-        label = "label_100"  # Default when few-shot is not used
-        
-    return f"{base_id}_{label}"
+        percentage = 100  # Default when few-shot is not used
+    
+    # Build final identifier
+    return f"{base_id}_{strategy}_labels{percentage}pct"
 
 def create_improved_classifier(in_features, num_classes, model_type="cnn", config=None):
     """Create an improved classification head with modern components."""
@@ -95,11 +124,13 @@ def create_model(num_classes, model_name=None, config=None, setup_logger=None):
         raise ValueError("You must provide a config module!")
     model_name = model_name or config.MODEL_NAME
     
+    # Generate full model identifier
+    model_id = get_model_identifier(model_name, config)
+    
     # Create logger if not provided
     if setup_logger is None:
-        setup_logger = ModelSetupLogger(model_name)
+        setup_logger = ModelSetupLogger(model_id, model_name=model_name)
     
-    model_id = get_model_identifier(model_name, config)
     setup_logger.log_model_creation_start(model_name, model_id)
     
     if model_name in ['efficientnet_b0', 'efficientnet_b3', 'efficientnet_b4']:
@@ -143,6 +174,11 @@ def create_model(num_classes, model_name=None, config=None, setup_logger=None):
 
         # Use improved classifier
         model.classifier = create_improved_classifier(in_features, num_classes, "cnn", config)
+
+        # CNNs generally do not support gradient checkpointing; log explicitly if requested
+        use_checkpointing = getattr(config, 'USE_GRADIENT_CHECKPOINTING', False)
+        if use_checkpointing:
+            setup_logger.log_gradient_checkpointing(False, False)
     
     elif model_name == 'resnet50':
         model = models.resnet50(weights='DEFAULT')
@@ -250,14 +286,45 @@ def create_model(num_classes, model_name=None, config=None, setup_logger=None):
             use_checkpointing = getattr(config, 'USE_GRADIENT_CHECKPOINTING', False)
             if use_checkpointing:
                 try:
-                    # Enable gradient checkpointing for memory efficiency
+                    # Try different methods for enabling gradient checkpointing
+                    checkpointing_enabled = False
+                    
+                    # Method 1: set_grad_checkpointing (newer versions)
                     if hasattr(vit_model, 'set_grad_checkpointing'):
                         vit_model.set_grad_checkpointing(True)
+                        checkpointing_enabled = True
+                    
+                    # Method 2: gradient_checkpointing_enable (alternative method)
+                    elif hasattr(vit_model, 'gradient_checkpointing_enable'):
+                        vit_model.gradient_checkpointing_enable()
+                        checkpointing_enabled = True
+                    
+                    # Method 3: Check if it's a HuggingFace-style model
+                    elif hasattr(vit_model, 'config') and hasattr(vit_model.config, 'use_cache'):
+                        vit_model.config.use_cache = False
+                        checkpointing_enabled = True
+                    
+                    # Method 4: Try to enable on the transformer blocks
+                    elif hasattr(vit_model, 'blocks'):
+                        for block in vit_model.blocks:
+                            if hasattr(block, 'gradient_checkpointing'):
+                                block.gradient_checkpointing = True
+                                checkpointing_enabled = True
+                    
+                    # Method 5: Try to enable on the encoder blocks (ViT specific)
+                    elif hasattr(vit_model, 'encoder') and hasattr(vit_model.encoder, 'layers'):
+                        for layer in vit_model.encoder.layers:
+                            if hasattr(layer, 'gradient_checkpointing'):
+                                layer.gradient_checkpointing = True
+                                checkpointing_enabled = True
+                    
+                    if checkpointing_enabled:
                         setup_logger.log_gradient_checkpointing(True, True)
                     else:
-                        setup_logger.log_gradient_checkpointing(True, False)
-                except Exception as checkpoint_error:
-                    setup_logger.log_gradient_checkpointing(True, False, str(checkpoint_error))
+                        setup_logger.log_gradient_checkpointing(True, False, "No gradient checkpointing method found")
+                        
+                except Exception as e:
+                    setup_logger.log_gradient_checkpointing(True, False, str(e))
             
         except Exception as e:
             error_msg = f"Error loading ViT model: {e}\nMake sure you have timm installed: pip install timm"
@@ -329,14 +396,38 @@ def create_model(num_classes, model_name=None, config=None, setup_logger=None):
             use_checkpointing = getattr(config, 'USE_GRADIENT_CHECKPOINTING', False)
             if use_checkpointing:
                 try:
-                    # Enable gradient checkpointing for memory efficiency
+                    # Try different methods for enabling gradient checkpointing
+                    checkpointing_enabled = False
+                    
+                    # Method 1: set_grad_checkpointing (newer versions)
                     if hasattr(dinov2_model, 'set_grad_checkpointing'):
                         dinov2_model.set_grad_checkpointing(True)  # type: ignore
+                        checkpointing_enabled = True
+                    
+                    # Method 2: gradient_checkpointing_enable (alternative method)
+                    elif hasattr(dinov2_model, 'gradient_checkpointing_enable'):
+                        dinov2_model.gradient_checkpointing_enable()  # type: ignore
+                        checkpointing_enabled = True
+                    
+                    # Method 3: Check if it's a HuggingFace-style model
+                    elif hasattr(dinov2_model, 'config') and hasattr(dinov2_model.config, 'use_cache'):
+                        dinov2_model.config.use_cache = False  # type: ignore
+                        checkpointing_enabled = True
+                    
+                    # Method 4: Try to enable on the transformer blocks
+                    elif hasattr(dinov2_model, 'blocks'):
+                        for block in dinov2_model.blocks:
+                            if hasattr(block, 'gradient_checkpointing'):
+                                block.gradient_checkpointing = True
+                                checkpointing_enabled = True
+                    
+                    if checkpointing_enabled:
                         setup_logger.log_gradient_checkpointing(True, True)
                     else:
-                        setup_logger.log_gradient_checkpointing(True, False)
-                except Exception as checkpoint_error:
-                    setup_logger.log_gradient_checkpointing(True, False, str(checkpoint_error))
+                        setup_logger.log_gradient_checkpointing(True, False, "No gradient checkpointing method found")
+                        
+                except Exception as e:
+                    setup_logger.log_gradient_checkpointing(True, False, str(e))
             
         except Exception as e:
             error_msg = f"Error loading DINOv2 model: {e}\nMake sure you have internet connection for torch.hub download"
@@ -445,7 +536,8 @@ def setup_training(model, class_weights_tensor, config=None, setup_logger=None):
     # Create logger if not provided
     if setup_logger is None:
         model_name = getattr(config, 'MODEL_NAME', 'unknown')
-        setup_logger = ModelSetupLogger(model_name)
+        model_id = get_model_identifier(model_name, config)
+        setup_logger = ModelSetupLogger(model_id, model_name=model_name)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)

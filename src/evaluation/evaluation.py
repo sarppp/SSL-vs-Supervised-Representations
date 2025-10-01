@@ -16,6 +16,7 @@ import os
 from datetime import datetime
 from src.utils.logger_manager import EvaluationLogger
 from src.config import config_paths
+from src.models.model_setup import get_model_identifier
 
 def evaluate_model(model, test_loader, device, class_names, use_amp=False, eval_logger=None):
     """Evaluate model on test set - only use this AFTER training is complete!"""
@@ -156,9 +157,12 @@ def comprehensive_test_evaluation(model, test_loader, device, class_names, model
     
     model_name = model_name or config_module.MODEL_NAME
     
+    # Generate full model identifier
+    model_identifier = get_model_identifier(model_name, config_module)
+    
     # Create evaluation logger only if not provided
     if eval_logger is None:
-        eval_logger = EvaluationLogger(model_name)
+        eval_logger = EvaluationLogger(model_identifier, model_name=model_name)
         is_shared_logger = False
     else:
         is_shared_logger = True
@@ -222,8 +226,19 @@ def comprehensive_test_evaluation(model, test_loader, device, class_names, model
     
     # Multi-class ROC-AUC (if probabilities available)
     try:
-        roc_auc = float(roc_auc_score(y_true, y_prob, multi_class='ovr', average='macro'))
-    except:
+        # Check if y_prob is valid and has the right shape
+        if y_prob is not None and len(y_prob) > 0 and y_prob.shape[1] > 1:
+            # Ensure probabilities are valid (not NaN, not all zeros)
+            if not np.any(np.isnan(y_prob)) and not np.all(y_prob == 0):
+                roc_auc = float(roc_auc_score(y_true, y_prob, multi_class='ovr', average='macro'))
+            else:
+                print(f"⚠️ Invalid probabilities for ROC-AUC: NaN={np.any(np.isnan(y_prob))}, All zeros={np.all(y_prob == 0)}")
+                roc_auc = None
+        else:
+            print(f"⚠️ Invalid y_prob shape for ROC-AUC: {y_prob.shape if y_prob is not None else 'None'}")
+            roc_auc = None
+    except Exception as e:
+        print(f"⚠️ ROC-AUC calculation failed: {e}")
         roc_auc = None
     
     # Per-class detailed metrics (for thesis tables)

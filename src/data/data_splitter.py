@@ -5,6 +5,7 @@ from sklearn.model_selection import train_test_split
 from collections import Counter
 import numpy as np
 from ..utils.logger_manager import DataSplitterLogger
+from ..models.model_setup import get_model_identifier
 from ..config import config_paths
 
 def split_clean_dataset(pickle_path=config_paths.CLEAN_DATASET_PICKLE, test_size=0.15, val_size=0.15, random_state=42, base_data_dir=config_paths.BASE_DATA_DIR, 
@@ -309,16 +310,27 @@ def apply_label_hiding_few_shot(train_paths, train_labels, mode=None, value=0.1,
     return train_paths, masked_labels
 
 def split_clean_dataset_with_config(pickle_path, config_module, base_data_dir=config_paths.BASE_DATA_DIR):
-    """Load and split dataset using config module settings (including label hiding few-shot)."""
+    """Load and split dataset using config settings (including label hiding few-shot),
+    with a unique data splitter log per model identifier/regime.
+    """
     few_shot_mode = getattr(config_module, 'FEW_SHOT_MODE', None)
     few_shot_value = getattr(config_module, 'FEW_SHOT_VALUE', 0.1)
+
+    # Build a model-specific dataset logger so the log file is unique per run
+    model_name = getattr(config_module, 'MODEL_NAME', 'model')
+    try:
+        model_identifier = get_model_identifier(model_name, config_module)
+    except Exception:
+        model_identifier = model_name
+    data_logger = DataSplitterLogger(f"dataset_{model_identifier}")
     
     return split_clean_dataset(
         pickle_path=pickle_path,
-        test_size=config_module.TEST_SIZE,
-        val_size=config_module.VAL_SIZE,
-        random_state=config_module.RANDOM_STATE,
+        test_size=getattr(config_module, 'TEST_SIZE', 0.15),
+        val_size=getattr(config_module, 'VAL_SIZE', 0.15),
+        random_state=getattr(config_module, 'RANDOM_STATE', 42),
         base_data_dir=base_data_dir,
         few_shot_mode=few_shot_mode,
-        few_shot_value=few_shot_value
+        few_shot_value=few_shot_value,
+        data_logger=data_logger
     )

@@ -7,6 +7,7 @@ from . import training_utils
 from .training_utils import EarlyStopping, monitor_overfitting, monitor_training_stability
 from .training_epochs import train_epoch, validate_epoch, save_checkpoint, cleanup_checkpoint_files
 from ..config import config_paths
+from ..models.model_setup import get_model_identifier
 
 
 def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, device, 
@@ -53,8 +54,11 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
     save_dir = getattr(config_module, 'SAVE_DIR', 'models')
     os.makedirs(save_dir, exist_ok=True)
     
+    # Generate full model identifier including training config
+    model_identifier = get_model_identifier(model_name, config_module)
+    
     # Setup logging with new TrainingLogger
-    training_logger = TrainingLogger(model_name, timestamp)
+    training_logger = TrainingLogger(model_identifier, timestamp, model_name=model_name)
     
     # Prepare config dict and dataset info
     config_dict = {k: v for k, v in config_module.__dict__.items() 
@@ -96,7 +100,9 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
     early_stopping = EarlyStopping(config_module=config_module, training_logger=training_logger)
     
     # Check if this is a DINOv2 model for progressive unfreezing
-    is_dinov2 = hasattr(model, 'unfreeze_backbone')
+    # Use model name or class name to properly detect DINOv2 vs ViT
+    model_name = getattr(config_module, 'MODEL_NAME', '')
+    is_dinov2 = model_name.startswith('dinov2') or 'DINOv2Classifier' in str(type(model))
     unfreeze_after = getattr(config_module, 'UNFREEZE_AFTER_EPOCH', 10) if is_dinov2 else None
     backbone_unfrozen = False
     
@@ -180,8 +186,6 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
         # Save best model
         if val_acc > best_val_acc:
             best_val_acc = val_acc
-            # Import here to avoid circular imports
-            from ..models.model_setup import get_model_identifier
             model_id = get_model_identifier(model_name, config_module)
             # Include timestamp to avoid overwrites and more precision for accuracy
             save_dir = getattr(config_module, 'SAVE_DIR', 'models')
@@ -208,8 +212,6 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
         if (epoch + 1) % 5 == 0:
             image_size = getattr(config_module, 'IMAGE_SIZE', (224, 224))
             img_size_str = f"{image_size[0]}x{image_size[1]}" if isinstance(image_size, tuple) else f"{image_size}"
-            # Import here to avoid circular imports
-            from ..models.model_setup import get_model_identifier
             model_id = get_model_identifier(model_name, config_module)
             save_dir = getattr(config_module, 'SAVE_DIR', 'models')
             checkpoint_path = os.path.join(
@@ -225,7 +227,6 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
         prev_val_acc = val_acc
     
     # Final model
-    from ..models.model_setup import get_model_identifier
     model_id = get_model_identifier(model_name, config_module)
     save_dir = getattr(config_module, 'SAVE_DIR', 'models')
     final_model_path = os.path.join(

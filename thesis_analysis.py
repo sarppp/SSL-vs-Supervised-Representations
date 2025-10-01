@@ -161,20 +161,38 @@ def plot_label_efficiency_curve(results, output_dir='outputs/plots'):
         data[model_regime]['accuracies'].append(accuracy)
     
     # Create plot
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(12, 8))
     
-    for model_regime, values in data.items():
+    # Define colors for different models
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+    markers = ['o', 's', '^', 'D', 'v', '<']
+    
+    for i, (model_regime, values) in enumerate(data.items()):
         # Sort by budget
         sorted_pairs = sorted(zip(values['budgets'], values['accuracies']))
         budgets, accs = zip(*sorted_pairs)
         
-        plt.plot(budgets, accs, marker='o', linewidth=2, markersize=8, label=model_regime)
+        color = colors[i % len(colors)]
+        marker = markers[i % len(markers)]
+        
+        plt.plot(budgets, accs, marker=marker, linewidth=2.5, markersize=10, 
+                label=model_regime, color=color, markerfacecolor=color, 
+                markeredgecolor='white', markeredgewidth=1.5)
     
-    plt.xlabel('Labeled Data (%)', fontsize=12)
-    plt.ylabel('Test Accuracy (%)', fontsize=12)
-    plt.title('Label Efficiency: Accuracy vs. Labeled Data Percentage', fontsize=14, pad=15)
-    plt.legend(loc='best', fontsize=10)
-    plt.grid(True, alpha=0.3)
+    plt.xlabel('Labeled Data (%)', fontsize=14, fontweight='bold')
+    plt.ylabel('Test Accuracy (%)', fontsize=14, fontweight='bold')
+    plt.title('Label Efficiency Analysis: Performance vs. Labeled Data Percentage', 
+              fontsize=16, fontweight='bold', pad=20)
+    plt.legend(loc='best', fontsize=11, framealpha=0.9)
+    plt.grid(True, alpha=0.3, linestyle='--')
+    
+    # Add budget comparison annotations
+    budget_values = [10, 50, 100]
+    for budget in budget_values:
+        plt.axvline(x=budget, color='gray', linestyle=':', alpha=0.5, linewidth=1)
+        plt.text(budget, plt.ylim()[1] * 0.95, f'{budget}%', 
+                ha='center', va='top', fontsize=10, color='gray', fontweight='bold')
+    
     plt.tight_layout()
     
     # Save both formats
@@ -186,7 +204,78 @@ def plot_label_efficiency_curve(results, output_dir='outputs/plots'):
     print(f"📊 Label efficiency plot saved:")
     print(f"   PNG: {png_path}")
     
+    # Create individual budget comparison plots
+    create_budget_comparison_plots(results, output_dir)
+    
     return png_path
+
+def create_budget_comparison_plots(results, output_dir='outputs/plots'):
+    """Create individual plots for each budget comparison"""
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    
+    # Group results by budget
+    budget_groups = {}
+    for result in results:
+        if not result.get('success', False):
+            continue
+        
+        budget = result.get('budget_value', 0) * 100
+        if budget not in budget_groups:
+            budget_groups[budget] = []
+        budget_groups[budget].append(result)
+    
+    # Create comparison plot for each budget
+    for budget_pct in sorted(budget_groups.keys()):
+        budget_results = budget_groups[budget_pct]
+        
+        # Extract data
+        models = []
+        accuracies = []
+        regimes = []
+        
+        for result in budget_results:
+            model = result['model_type'].upper()
+            regime = result.get('training_regime', 'N/A')
+            accuracy = result.get('test_accuracy', 0)
+            
+            models.append(f"{model}\n({regime})")
+            accuracies.append(accuracy)
+            regimes.append(regime)
+        
+        # Create bar plot
+        plt.figure(figsize=(10, 6))
+        colors = ['#3498db' if regime == 'supervised' else '#e74c3c' if regime == 'linear_probe' else '#2ecc71' 
+                 for regime in regimes]
+        
+        bars = plt.bar(models, accuracies, color=colors, alpha=0.8, edgecolor='black', linewidth=1)
+        
+        # Add value labels on bars
+        for bar, acc in zip(bars, accuracies):
+            plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5, 
+                    f'{acc:.1f}%', ha='center', va='bottom', fontweight='bold', fontsize=11)
+        
+        plt.xlabel('Model Configuration', fontsize=12, fontweight='bold')
+        plt.ylabel('Test Accuracy (%)', fontsize=12, fontweight='bold')
+        plt.title(f'Model Performance Comparison at {int(budget_pct)}% Labeled Data', 
+                 fontsize=14, fontweight='bold', pad=15)
+        plt.xticks(rotation=15, ha='right')
+        plt.grid(True, alpha=0.3, axis='y')
+        
+        # Add legend for training regimes
+        from matplotlib.patches import Patch
+        legend_elements = [Patch(facecolor='#3498db', label='Supervised'),
+                          Patch(facecolor='#e74c3c', label='Linear Probe'),
+                          Patch(facecolor='#2ecc71', label='Fine-tune')]
+        plt.legend(handles=legend_elements, loc='upper right', fontsize=10)
+        
+        plt.tight_layout()
+        
+        # Save plot
+        budget_png_path = Path(output_dir) / f'budget_comparison_{int(budget_pct)}pct.png'
+        plt.savefig(budget_png_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"📊 Budget comparison plot saved: {budget_png_path}")
 
 def plot_model_comparison_bar(results, output_dir='outputs/plots'):
     """
