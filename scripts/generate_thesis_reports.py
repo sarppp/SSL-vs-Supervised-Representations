@@ -3,6 +3,8 @@ import os
 import json
 from pathlib import Path
 from collections import defaultdict
+import numpy as np
+from math import sqrt
 
 import matplotlib.pyplot as plt
 
@@ -105,7 +107,8 @@ def write_methods_txt(results):
 
     # For each condition, summarize compute and evaluation protocol from training config
     for (model_family, regime), label_map in sorted(results.items()):
-        lines.append(f'Model: {model_family.upper()} | Regime: {regime}')</n>        label_list = sorted(label_map.keys())
+        lines.append(f'Model: {model_family.upper()} | Regime: {regime}')
+        label_list = sorted(label_map.keys())
         rep = label_map[label_list[-1]]  # representative config from a label setting
         cfg = rep.get('train_config') or {}
         if cfg:
@@ -177,12 +180,100 @@ def plot_label_efficiency(results):
     return out_path
 
 
+def bootstrap_ci_accuracy(preds, labels, n_boot=5000, alpha=0.05, rng=None):
+    rng = np.random.default_rng(None if rng is None else rng)
+    preds = np.asarray(preds)
+    labels = np.asarray(labels)
+    n = len(labels)
+    idx = np.arange(n)
+    accs = np.empty(n_boot, dtype=float)
+    for i in range(n_boot):
+        sample = rng.choice(idx, size=n, replace=True)
+        accs[i] = (preds[sample] == labels[sample]).mean() * 100.0
+    lower = np.percentile(accs, 100 * (alpha / 2))
+    upper = np.percentile(accs, 100 * (1 - alpha / 2))
+    return accs.mean(), (lower, upper)
+
+
+def mcnemar_table(preds_a, preds_b, labels):
+    preds_a = np.asarray(preds_a)
+    preds_b = np.asarray(preds_b)
+    labels = np.asarray(labels)
+    correct_a = preds_a == labels
+    correct_b = preds_b == labels
+    b01 = np.logical_and(~correct_a, correct_b).sum()  # A wrong, B right
+    b10 = np.logical_and(correct_a, ~correct_b).sum()  # A right, B wrong
+    return b01, b10
+
+
+def mcnemar_exact_p(b01, b10):
+    # Exact binomial test for symmetric null: p = sum_{k>=max(b01,b10)} C(n,k) 0.5^n
+    from math import comb
+    n = b01 + b10
+    if n == 0:
+        return 1.0
+    k = max(b01, b10)
+    p = sum(comb(n, i) for i in range(k, n + 1)) * (0.5 ** n)
+    return p
+
+
+def ci_and_significance(results):
+    # For each condition, compute bootstrap CI using stored predictions
+    # Also compute McNemar between DINOv2 linear-probe vs CNN/VIT for shared label budgets
+    stats_lines = []
+    stats_lines.append('='*80)
+    stats_lines.append('Uncertainty and Significance (Bootstrap CI and McNemar)')
+    stats_lines.append('='*80)
+    pairs = [('dinov2', 'linear_probe'), ('cnn', 'supervised'), ('vit', 'supervised')]
+    # Build quick index from eval files
+    def key(fam, reg):
+        return (fam, reg)
+
+    # Bootstrap CIs
+    for (fam, reg), label_map in sorted(results.items()):
+        for lp, entry in sorted(label_map.items()):
+            ef = Path(entry['eval_file'])
+            data = safe_read_json(ef)
+            preds = data.get('predictions')
+            labels = data.get('true_labels')
+            if preds is None or labels is None:
+                stats_lines.append(f'{fam.upper()} {reg} @ {lp}%: predictions unavailable; CI skipped')
+                continue
+            mean_acc, (lo, hi) = bootstrap_ci_accuracy(preds, labels)
+            stats_lines.append(f'{fam.upper()} {reg} @ {lp}%: {mean_acc:.2f}% (95% CI {lo:.2f}, {hi:.2f})')
+
+    # McNemar tests at shared budgets
+    shared_budgets = sorted(set.intersection(*[set(results.get(key(*p), {}).keys()) for p in pairs if key(*p) in results]))
+    for lp in shared_budgets:
+        # Compare DINOv2 vs CNN
+        if key('dinov2', 'linear_probe') in results and key('cnn', 'supervised') in results:
+            a = safe_read_json(Path(results[key('dinov2', 'linear_probe')][lp]['eval_file']))
+            b = safe_read_json(Path(results[key('cnn', 'supervised')][lp]['eval_file']))
+            b01, b10 = mcnemar_table(a['predictions'], b['predictions'], a['true_labels'])
+            p = mcnemar_exact_p(b01, b10)
+            stats_lines.append(f'McNemar (DINOv2 vs CNN) @ {lp}%: b01={b01}, b10={b10}, p={p:.4f}')
+        # Compare DINOv2 vs ViT
+        if key('dinov2', 'linear_probe') in results and key('vit', 'supervised') in results and lp in results[key('vit', 'supervised')]:
+            a = safe_read_json(Path(results[key('dinov2', 'linear_probe')][lp]['eval_file']))
+            b = safe_read_json(Path(results[key('vit', 'supervised')][lp]['eval_file']))
+            b01, b10 = mcnemar_table(a['predictions'], b['predictions'], a['true_labels'])
+            p = mcnemar_exact_p(b01, b10)
+            stats_lines.append(f'McNemar (DINOv2 vs ViT) @ {lp}%: b01={b01}, b10={b10}, p={p:.4f}')
+
+    out = OUTPUTS_DIR / 'thesis_stats.txt'
+    with open(out, 'w') as f:
+        f.write('\n'.join(stats_lines))
+    return out
+
+
 def main():
     results = collect_results()
     methods_path = write_methods_txt(results)
     plot_path = plot_label_efficiency(results)
+    stats_path = ci_and_significance(results)
     print(f'Wrote methods summary to: {methods_path}')
     print(f'Wrote label-efficiency plot to: {plot_path}')
+    print(f'Wrote CI and significance stats to: {stats_path}')
 
 
 if __name__ == '__main__':
