@@ -40,33 +40,80 @@ def load_comparison_results(results_file=None):
     raise ValueError("Unsupported results JSON format: expected list or dict with 'model_results'")
 
 def create_summary_table(results):
-    """Create summary table with all metrics for thesis"""
-    
+    """Create summary table with all metrics for thesis.
+    Robust to None/NaN values across metrics.
+    """
+
+    def fmt_metric(value, precision=3, scale=1.0):
+        if value is None:
+            return 'N/A'
+        try:
+            v = float(value) * scale
+        except (TypeError, ValueError):
+            return 'N/A'
+        if np.isnan(v) or np.isinf(v):
+            return 'N/A'
+        return f"{v:.{precision}f}"
+
+    def fmt_int(value, default=0):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def fmt_time_seconds_to_minutes(value_seconds):
+        try:
+            minutes = float(value_seconds) / 60.0
+        except (TypeError, ValueError):
+            return 'N/A'
+        if np.isnan(minutes) or np.isinf(minutes):
+            return 'N/A'
+        return f"{minutes:.1f}"
+
+    def fmt_float(value, precision=1):
+        try:
+            v = float(value)
+        except (TypeError, ValueError):
+            return 'N/A'
+        if np.isnan(v) or np.isinf(v):
+            return 'N/A'
+        return f"{v:.{precision}f}"
+
     summary_data = []
-    
+
     for result in results:
         if not result.get('success', False):
             continue
-        
+
+        budget_mode = result.get('budget_mode')
+        budget_value = result.get('budget_value')
+        if budget_mode == 'percentage':
+            try:
+                label_budget = f"{int(float(budget_value) * 100)}%"
+            except (TypeError, ValueError):
+                label_budget = 'N/A'
+        else:
+            label_budget = budget_value if budget_value is not None else 'N/A'
+
         row = {
-            'Model': result['model_type'].upper(),
+            'Model': result.get('model_type', 'N/A').upper() if result.get('model_type') else 'N/A',
             'Regime': result.get('training_regime', 'N/A'),
-            'Label Budget': f"{int(result.get('budget_value', 0)*100)}%" if result.get('budget_mode') == 'percentage' else result.get('budget_value', 'N/A'),
-            'Test Acc (%)': f"{result.get('test_accuracy', 0):.2f}",
-            'Precision': f"{result.get('precision_macro', 0):.3f}",
-            'Recall': f"{result.get('recall_macro', 0):.3f}",
-            'F1-Score': f"{result.get('f1_macro', 0):.3f}",
-            'MCC': f"{result.get('matthews_corrcoef', 0):.3f}",
-            'ROC-AUC': f"{result.get('roc_auc_ovr', 0):.3f}" if result.get('roc_auc_ovr') else 'N/A',
-            'Train Samples': result.get('labeled_samples', 0),
-            'Epochs': result.get('epochs', 0),
-            'Time (min)': f"{result.get('time', 0)/60:.1f}",
-            'Time/Epoch (s)': f"{result.get('time_per_epoch', 0):.1f}",
-            'Images/sec': f"{result.get('images_per_sec', 0):.1f}",
+            'Label Budget': label_budget,
+            'Test Acc (%)': fmt_metric(result.get('test_accuracy'), precision=2, scale=1.0),
+            'Precision': fmt_metric(result.get('precision_macro'), precision=3, scale=1.0),
+            'Recall': fmt_metric(result.get('recall_macro'), precision=3, scale=1.0),
+            'F1-Score': fmt_metric(result.get('f1_macro'), precision=3, scale=1.0),
+            'MCC': fmt_metric(result.get('matthews_corrcoef'), precision=3, scale=1.0),
+            'ROC-AUC': fmt_metric(result.get('roc_auc_ovr'), precision=3, scale=1.0) if result.get('roc_auc_ovr') is not None else 'N/A',
+            'Train Samples': fmt_int(result.get('labeled_samples'), default=0),
+            'Epochs': fmt_int(result.get('epochs'), default=0),
+            'Time (min)': fmt_time_seconds_to_minutes(result.get('time')),
+            'Time/Epoch (s)': fmt_float(result.get('time_per_epoch'), precision=1),
+            'Images/sec': fmt_float(result.get('images_per_sec'), precision=1),
             'GPU Preset': result.get('gpu_preset', 'N/A')
         }
         summary_data.append(row)
-    
+
     df = pd.DataFrame(summary_data)
     return df
 
@@ -269,6 +316,29 @@ def generate_executive_summary(results, output_file='outputs/executive_summary.t
     
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
     
+    def fmt_metric(value, precision=3, scale=1.0, na_str='N/A'):
+        if value is None:
+            return na_str
+        try:
+            v = float(value) * scale
+        except (TypeError, ValueError):
+            return na_str
+        if np.isnan(v) or np.isinf(v):
+            return na_str
+        return f"{v:.{precision}f}"
+
+    def fmt_percent_frac(frac):
+        try:
+            v = float(frac)
+        except (TypeError, ValueError):
+            return 'N/A'
+        if np.isnan(v) or np.isinf(v):
+            return 'N/A'
+        try:
+            return f"{int(v*100)}%"
+        except Exception:
+            return 'N/A'
+
     # Find best model
     successful = [r for r in results if r.get('success', False)]
     if not successful:
@@ -287,7 +357,10 @@ def generate_executive_summary(results, output_file='outputs/executive_summary.t
         budget = r.get('budget_value', 0)
         if budget not in by_budget:
             by_budget[budget] = []
-        by_budget[budget].append(r.get('test_accuracy', 0))
+        try:
+            by_budget[budget].append(float(r.get('test_accuracy', 0) or 0))
+        except (TypeError, ValueError):
+            by_budget[budget].append(0.0)
     
     # Generate summary
     summary = f"""
@@ -303,14 +376,14 @@ Failed:                {total_experiments - successful_experiments}
 
 🏆 BEST PERFORMING MODEL
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Model:                 {best['model_type'].upper()}
+Model:                 {best.get('model_type', 'N/A').upper() if best.get('model_type') else 'N/A'}
 Training Regime:       {best.get('training_regime', 'N/A')}
-Label Budget:          {int(best.get('budget_value', 0)*100)}%
-Test Accuracy:         {best.get('test_accuracy', 0):.2f}%
-Precision (macro):     {best.get('precision_macro', 0):.3f}
-Recall (macro):        {best.get('recall_macro', 0):.3f}
-F1-Score (macro):      {best.get('f1_macro', 0):.3f}
-Matthews Corr. Coef:   {best.get('matthews_corrcoef', 0):.3f}
+Label Budget:          {fmt_percent_frac(best.get('budget_value'))}
+Test Accuracy:         {fmt_metric(best.get('test_accuracy'), precision=2)}%
+Precision (macro):     {fmt_metric(best.get('precision_macro'), precision=3)}
+Recall (macro):        {fmt_metric(best.get('recall_macro'), precision=3)}
+F1-Score (macro):      {fmt_metric(best.get('f1_macro'), precision=3)}
+Matthews Corr. Coef:   {fmt_metric(best.get('matthews_corrcoef'), precision=3)}
 
 📈 PERFORMANCE BY LABEL BUDGET
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -318,27 +391,31 @@ Matthews Corr. Coef:   {best.get('matthews_corrcoef', 0):.3f}
     
     for budget in sorted(by_budget.keys()):
         accs = by_budget[budget]
-        avg_acc = np.mean(accs)
-        max_acc = np.max(accs)
-        summary += f"{int(budget*100):3d}% labels: Avg={avg_acc:5.2f}% | Best={max_acc:5.2f}%\n"
+        if len(accs) == 0:
+            continue
+        avg_acc = float(np.mean(accs))
+        max_acc = float(np.max(accs))
+        budget_str = fmt_percent_frac(budget)
+        summary += f"{budget_str:>3} labels: Avg={avg_acc:5.2f}% | Best={max_acc:5.2f}%\n"
     
     summary += f"""
  KEY FINDINGS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. Best model: {best['model_type'].upper()} with {best.get('training_regime', 'N/A')} 
-   achieved {best.get('test_accuracy', 0):.2f}% accuracy
+1. Best model: {best.get('model_type', 'N/A').upper() if best.get('model_type') else 'N/A'} with {best.get('training_regime', 'N/A')} 
+   achieved {fmt_metric(best.get('test_accuracy'), precision=2)}% accuracy
 
 2. Label efficiency: """
     
-    if 0.1 in by_budget and 1.0 in by_budget:
-        acc_10 = np.mean(by_budget[0.1])
-        acc_100 = np.mean(by_budget[1.0])
-        summary += f"With only 10% labels, models achieved {acc_10:.1f}% "
-        summary += f"({acc_10/acc_100*100:.1f}% of full-label performance)\n"
+    if 0.1 in by_budget and 1.0 in by_budget and len(by_budget[0.1]) > 0 and len(by_budget[1.0]) > 0:
+        acc_10 = float(np.mean(by_budget[0.1]))
+        acc_100 = float(np.mean(by_budget[1.0]))
+        if acc_100 != 0:
+            summary += f"With only 10% labels, models achieved {acc_10:.1f}% "
+            summary += f"({acc_10/acc_100*100:.1f}% of full-label performance)\n"
     
     summary += f"""
 3. Training efficiency: Experiments completed successfully
-   Average training time per model: {np.mean([r.get('time', 0) for r in successful])/60:.1f} minutes
+   Average training time per model: {float(np.mean([float(r.get('time', 0) or 0) for r in successful]))/60:.1f} minutes
 
  OUTPUT FILES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

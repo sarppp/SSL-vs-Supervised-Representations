@@ -335,6 +335,31 @@ class TrainingLogger:
             plots_dir = Path(OUTPUTS_DIR) / 'plots'
             plots_dir.mkdir(parents=True, exist_ok=True)
 
+            # Derive label-budget and regime suffixes for filenames for clarity across runs
+            config_dict = self.session_metadata.get('config', {}) if hasattr(self, 'session_metadata') else {}
+            few_shot_mode = None
+            few_shot_value = None
+            if isinstance(config_dict, dict):
+                few_shot_mode = config_dict.get('FEW_SHOT_MODE', config_dict.get('few_shot_mode'))
+                few_shot_value = config_dict.get('FEW_SHOT_VALUE', config_dict.get('few_shot_value'))
+                training_regime = config_dict.get('TRAINING_REGIME', config_dict.get('training_regime'))
+            suffix = ""
+            regime_suffix = ""
+            try:
+                if few_shot_mode == 'percentage' and few_shot_value is not None:
+                    suffix = f"_labels{int(float(few_shot_value)*100)}pct"
+                elif few_shot_mode == 'per_class' and few_shot_value is not None:
+                    suffix = f"_labels{int(few_shot_value)}perclass"
+                elif few_shot_mode is None:
+                    suffix = "_labels100pct"
+                if training_regime:
+                    regime_suffix = f"_{str(training_regime)}"
+            except Exception:
+                suffix = ""
+                regime_suffix = ""
+
+            base = f"{self.model_name}{regime_suffix}{suffix}"
+
             epochs = [e + 1 for e in self.metrics_history.get('epochs', [])]
             # Fallback if epochs list wasn't populated
             if not epochs:
@@ -351,7 +376,7 @@ class TrainingLogger:
                 plt.title('Loss vs Epoch')
                 plt.legend()
                 plt.tight_layout()
-                plt.savefig(plots_dir / f'{self.model_name}_loss_curve.png', dpi=300, bbox_inches='tight')
+                plt.savefig(plots_dir / f'{base}_loss_curve.png', dpi=300, bbox_inches='tight')
                 plt.close()
 
             # Accuracy curves
@@ -364,7 +389,7 @@ class TrainingLogger:
                 plt.title('Accuracy vs Epoch')
                 plt.legend()
                 plt.tight_layout()
-                plt.savefig(plots_dir / f'{self.model_name}_accuracy_curve.png', dpi=300, bbox_inches='tight')
+                plt.savefig(plots_dir / f'{base}_accuracy_curve.png', dpi=300, bbox_inches='tight')
                 plt.close()
 
             # Learning rate curve
@@ -375,9 +400,8 @@ class TrainingLogger:
                 plt.ylabel('Learning Rate')
                 plt.title('Learning Rate Schedule')
                 plt.tight_layout()
-                plt.savefig(plots_dir / f'{self.model_name}_lr_curve.png', dpi=300, bbox_inches='tight')
+                plt.savefig(plots_dir / f'{base}_lr_curve.png', dpi=300, bbox_inches='tight')
                 plt.close()
-
             self.logger.info(f" Training curves saved to: {plots_dir}")
         except Exception as e:
             self.logger.warning(f" Could not save training curves: {e}")

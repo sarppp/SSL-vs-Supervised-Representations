@@ -106,20 +106,41 @@ def save_confusion_matrix_plot(cm, class_names, model_name, config_module=None):
     plt.yticks(rotation=0)
     plt.tight_layout()
     
-    # Save as PNG (for viewing) and PDF (for thesis)
-    base_filename = f'confusion_matrix_{model_name}'
+    # Derive label-budget suffix based on config_module if available
+    budget_suffix = ""
+    try:
+        if config_module is not None:
+            mode = getattr(config_module, 'FEW_SHOT_MODE', None)
+            value = getattr(config_module, 'FEW_SHOT_VALUE', None)
+            if mode == 'percentage' and value is not None:
+                budget_suffix = f"_labels{int(float(value)*100)}pct"
+            elif mode == 'per_class' and value is not None:
+                budget_suffix = f"_labels{int(value)}perclass"
+            elif mode is None:
+                budget_suffix = "_labels100pct"
+    except Exception:
+        budget_suffix = ""
+
+    # Include training regime in filename if known
+    regime_suffix = ""
+    try:
+        if config_module is not None:
+            regime = getattr(config_module, 'TRAINING_REGIME', None)
+            if regime:
+                regime_suffix = f"_{str(regime)}"
+    except Exception:
+        regime_suffix = ""
+
+    base_filename = f'confusion_matrix_{model_name}{regime_suffix}{budget_suffix}'
     png_path = os.path.join(plots_dir, f'{base_filename}.png')
-    pdf_path = os.path.join(plots_dir, f'{base_filename}.pdf')
     
     plt.savefig(png_path, dpi=300, bbox_inches='tight')
-    plt.savefig(pdf_path, dpi=300, bbox_inches='tight')
     plt.close()
     
     print(f"📊 Confusion matrix saved:")
     print(f"   PNG: {png_path}")
-    print(f"   PDF: {pdf_path}")
     
-    return png_path, pdf_path
+    return png_path
 
 def detailed_classification_report(y_true, y_pred, class_names, eval_logger=None):
     """Generate detailed per-class performance metrics with over/underfitting warnings."""
@@ -282,3 +303,27 @@ def comprehensive_test_evaluation(model, test_loader, device, class_names, model
         'f1_macro': f1_macro,
         'confusion_matrix': cm
     }
+
+
+if __name__ == "__main__":
+    # Minimal informative print when run as a module script.
+    try:
+        logs_dir = config_paths.LOGS_DIR
+        eval_dir = config_paths.EVALUATION_RESULTS_DIR
+        outputs_dir = config_paths.OUTPUTS_DIR
+        print("Evaluation module loaded. This module exposes functions for programmatic evaluation.")
+        print(f"Logs directory: {logs_dir}")
+        print(f"Evaluation results directory: {eval_dir}")
+        print(f"Outputs root: {outputs_dir}")
+
+        # Show latest evaluation JSON if exists
+        import glob, os
+        pattern = os.path.join(eval_dir, "evaluation_*.json")
+        files = glob.glob(pattern)
+        if files:
+            latest = max(files, key=os.path.getmtime)
+            print(f"Latest evaluation results: {latest}")
+        else:
+            print("No evaluation results found yet. Run your training/evaluation pipeline first.")
+    except Exception as e:
+        print(f"Could not display evaluation info: {e}")
