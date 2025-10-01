@@ -11,9 +11,9 @@ MAX_WORKERS = mp.cpu_count()
 # Set to False if images are already validated to skip expensive checks
 VALIDATE_IMAGES = False
 
-# Learning Rate Warmup (important for ViT)
+# Learning Rate Warmup (important for ViT - optimized)
 USE_WARMUP = True
-WARMUP_EPOCHS = 5
+WARMUP_EPOCHS = 3  # Shorter warmup for better convergence
 WARMUP_START_LR = 1e-6
 
 # Valid file extensions
@@ -33,35 +33,35 @@ AVAILABLE_MODELS = [
 ]
 MODEL_NAME = 'vit_base_patch16_224'  # Default model
 
-# ViT-specific Training Configuration
-LEARNING_RATE = 0.001
-WEIGHT_DECAY = 0.01
-EPOCHS = 15  # Match other models for fair comparison
+# ViT-specific Training Configuration (optimized for best performance)
+LEARNING_RATE = 0.0005  # Lower LR for better stability
+WEIGHT_DECAY = 0.05     # Higher weight decay for better regularization
+EPOCHS = 15  # Match other models for fair comparison (unchanged)
 PATIENCE = 5  # For LR scheduler
 LR_FACTOR = 0.5
-DROPOUT = 0.1
+DROPOUT = 0.15  # Slightly higher dropout for better generalization
 
-# Model-specific configurations
+# Model-specific configurations (optimized for best performance)
 MODEL_CONFIGS = {
     'vit_tiny_patch16_224': {
-        'learning_rate': 0.001,
-        'weight_decay': 0.01,
-        'dropout': 0.1
+        'learning_rate': 0.0008,
+        'weight_decay': 0.05,
+        'dropout': 0.15
     },
     'vit_small_patch16_224': {
-        'learning_rate': 0.001,
-        'weight_decay': 0.01,
-        'dropout': 0.1
+        'learning_rate': 0.0006,
+        'weight_decay': 0.05,
+        'dropout': 0.15
     },
     'vit_base_patch16_224': {
-        'learning_rate': 0.0008,
-        'weight_decay': 0.01,
-        'dropout': 0.1
+        'learning_rate': 0.0005,
+        'weight_decay': 0.05,
+        'dropout': 0.15
     },
     'vit_large_patch16_224': {
-        'learning_rate': 0.0005,
-        'weight_decay': 0.015,
-        'dropout': 0.15
+        'learning_rate': 0.0003,
+        'weight_decay': 0.08,
+        'dropout': 0.2
     }
 }
 
@@ -97,8 +97,8 @@ OPTIMIZER_PARAMS = {
     }
 }
 
-# Scheduler Configuration
-SCHEDULER = 'plateau'
+# Scheduler Configuration (optimized for ViT)
+SCHEDULER = 'cosine'  # Cosine annealing works better for ViT
 SCHEDULER_PARAMS = {
     'plateau': {
         'mode': 'min',

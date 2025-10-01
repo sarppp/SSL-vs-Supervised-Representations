@@ -689,8 +689,8 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
             active_config.LEARNING_RATE = float(0.001)   # 0.001 × 4 (linear scaling)
             active_config.DROPOUT = float(0.2)           # Higher dropout for training from scratch
         elif model_type == 'vit':
-            active_config.LEARNING_RATE = float(0.001)   # Lower LR for training from scratch
-            active_config.DROPOUT = float(0.1)           # ViT-appropriate dropout
+            active_config.LEARNING_RATE = float(0.0005)  # Optimized LR for ViT stability
+            active_config.DROPOUT = float(0.15)          # Higher dropout for better generalization
         else:  # dinov2 supervised (theoretical case)
             active_config.LEARNING_RATE = float(0.0005)   # 0.0005 × 4 (linear scaling)
             active_config.DROPOUT = float(0.1)
@@ -715,9 +715,13 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
         active_config.WARMUP_START_LR = 1e-7
         
     else:  # supervised
-        # Supervised: plateau scheduler for adaptive learning
-        active_config.SCHEDULER = 'plateau'
-        active_config.SCHEDULER_PARAMS = {'plateau': {'mode': 'min', 'patience': 5, 'factor': 0.5}}
+        # Supervised: cosine scheduler for ViT, plateau for others
+        if model_type == 'vit':
+            active_config.SCHEDULER = 'cosine'
+            active_config.SCHEDULER_PARAMS = {'cosine': {'T_max': active_config.EPOCHS, 'eta_min': 1e-6}}
+        else:
+            active_config.SCHEDULER = 'plateau'
+            active_config.SCHEDULER_PARAMS = {'plateau': {'mode': 'min', 'patience': 5, 'factor': 0.5}}
         active_config.USE_WARMUP = True
         active_config.WARMUP_EPOCHS = 3
         active_config.WARMUP_START_LR = 1e-6

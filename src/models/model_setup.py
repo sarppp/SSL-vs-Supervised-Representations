@@ -4,6 +4,7 @@ import torchvision.models as models
 import os
 import types
 from ..utils.logger_manager import ModelSetupLogger
+import re
 from ..config import config_paths
 
 def get_model_identifier(model_name=None, config=None):
@@ -22,6 +23,17 @@ def get_model_identifier(model_name=None, config=None):
     if config is None:
         raise ValueError("You must provide a config module!")
     model_name = model_name or config.MODEL_NAME
+
+    # Sanitize: strip any pre-attached regime/label suffixes to avoid duplicates
+    # e.g., "vit_base_patch16_224_full_train_labels50pct" -> "vit_base_patch16_224"
+    # We remove trailing segments like _linear_probe|_fine_tune|_freeze|_full_train and _labelsXXpct/perclass
+    suffix_pattern = re.compile(r"_(linear_probe|fine_tune|freeze|full_train)(?:_.+)?$|_labels\d+(?:pct|perclass)$")
+    # Remove repeated label/regime chunks iteratively at the end
+    while True:
+        new_name = suffix_pattern.sub("", model_name)
+        if new_name == model_name:
+            break
+        model_name = new_name
     
     # Create model family identifier to avoid conflicts
     if model_name.startswith('dinov2'):
