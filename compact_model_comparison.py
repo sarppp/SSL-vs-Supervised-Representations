@@ -509,9 +509,32 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         if experiment_context:
             print(f"💾 Model checkpoints will be saved with identifier: {current_model_name}")
         
-        # Create optimizer and scheduler
-        optimizer = torch.optim.Adam(model.parameters(), lr=active_config.LEARNING_RATE)
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.1)
+        # Create optimizer and scheduler (ViT-friendly: AdamW + warmup + cosine)
+        # Build ViT param groups with proper weight-decay exclusions
+        param_groups = None
+        try:
+            if isinstance(original_name, str) and original_name.startswith('vit_'):
+                no_decay_keywords = ['bias', 'pos_embed', 'cls_token', 'norm']
+                decay_params = []
+                no_decay_params = []
+                for name, param in model.named_parameters():
+                    if not param.requires_grad:
+                        continue
+                    if any(k in name for k in no_decay_keywords):
+                        no_decay_params.append(param)
+                    else:
+                        decay_params.append(param)
+                if len(decay_params) > 0 or len(no_decay_params) > 0:
+                    wd = getattr(active_config, 'WEIGHT_DECAY', 0.05)
+                    param_groups = [
+                        {'params': decay_params, 'weight_decay': wd},
+                        {'params': no_decay_params, 'weight_decay': 0.0},
+                    ]
+        except Exception:
+            param_groups = None
+
+        optimizer = model_setup.create_optimizer(param_groups if param_groups is not None else model.parameters(), config=active_config)
+        scheduler = model_setup.create_scheduler(optimizer, config=active_config)
         
         # 🎯 CREATE FEW-SHOT AWARE LOSS FUNCTION
         base_criterion = torch.nn.CrossEntropyLoss()
