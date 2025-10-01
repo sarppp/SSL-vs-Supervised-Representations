@@ -36,7 +36,7 @@ except ImportError as e:
 
 # 🔧 OPTIONAL: GPU Configuration presets (comment out if not using)
 try:
-    from gpu_configs import L40S_CONSERVATIVE, A100_OPTIMAL
+    from gpu_configs import L40S_CONSERVATIVE, A100_OPTIMAL, A100_ULTRA, H100_OPTIMAL, H100_ULTRA
     GPU_CONFIGS_AVAILABLE = True
     print("✅ GPU configs imported - You can use preset configurations")
 except ImportError:
@@ -227,8 +227,14 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
     # OPTION 1B: A100 80GB (Optimal) - ~3-4 hours ⚡
     # GPU_CONFIG = A100_OPTIMAL if GPU_CONFIGS_AVAILABLE else None
     
-    # OPTION 1C: A100 80GB (Ultra-Fast) - ~2-3 hours 🚀 [Requires LR adjustment!]
+    # OPTION 1C: A100 80GB (Ultra-Fast) - ~2-3 hours 
     # GPU_CONFIG = A100_ULTRA if GPU_CONFIGS_AVAILABLE else None
+
+    # OPTION 1D: H100 80GB (Optimal) - ~2-3 hours ⚡
+    # GPU_CONFIG = H100_OPTIMAL if GPU_CONFIGS_AVAILABLE else None
+
+    # OPTION 1E: H100 80GB (Ultra-Fast) - ~1.5-2.5 hours 🚀
+    # GPU_CONFIG = H100_ULTRA if GPU_CONFIGS_AVAILABLE else None
     
     if GPU_CONFIG is not None:
         PER_STEP_BATCH = GPU_CONFIG['per_step_batch']
@@ -1081,6 +1087,7 @@ def main():
     
     # 🎯 CRITICAL: Label efficiency analysis - how much labeled data is needed?
     LABEL_BUDGETS = [
+        # ('percentage', 0.05),  # 5% of labels visible (very low-label)
         ('percentage', 0.1),   # 10% of labels visible (few-shot learning)
         ('percentage', 0.5),   # 50% of labels visible (medium-shot learning)  
         ('percentage', 1.0)    # 100% of labels visible (full supervision)
