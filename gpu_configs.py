@@ -13,7 +13,28 @@ L40S_CONSERVATIVE = {
     'gradient_accum_steps': 2,
     'effective_batch': 256,
     'num_workers': 8,
-    'description': '✅ Safe for L40S, ~7-8 hours for full dataset'
+    'description': '✅ Safe for L40S, ~7-8 hours for full dataset',
+    # Learning rate configurations for different training regimes
+    'learning_rates': {
+        'linear_probe': {
+            'base_lr': 0.0008,
+            'lr_multiplier': 1.0,  # No additional scaling needed
+            'warmup_epochs': 2,
+            'warmup_start_lr': 1e-5
+        },
+        'fine_tune': {
+            'base_lr': 0.0008,
+            'lr_multiplier': 1.0,
+            'warmup_epochs': 2,
+            'warmup_start_lr': 1e-5
+        },
+        'supervised': {
+            'base_lr': 0.0005,
+            'lr_multiplier': 1.0,
+            'warmup_epochs': 3,
+            'warmup_start_lr': 1e-6
+        }
+    }
 }
 
 L40S_AGGRESSIVE = {
@@ -22,7 +43,27 @@ L40S_AGGRESSIVE = {
     'gradient_accum_steps': 2,
     'effective_batch': 384,
     'num_workers': 8,
-    'description': '⚠️ May OOM on large models, test first. ~5-6 hours if successful'
+    'description': '⚠️ May OOM on large models, test first. ~5-6 hours if successful',
+    'learning_rates': {
+        'linear_probe': {
+            'base_lr': 0.0008,
+            'lr_multiplier': 1.2,  # Slightly higher for larger batch
+            'warmup_epochs': 2,
+            'warmup_start_lr': 1e-5
+        },
+        'fine_tune': {
+            'base_lr': 0.0008,
+            'lr_multiplier': 1.2,
+            'warmup_epochs': 2,
+            'warmup_start_lr': 1e-5
+        },
+        'supervised': {
+            'base_lr': 0.0005,
+            'lr_multiplier': 1.2,
+            'warmup_epochs': 3,
+            'warmup_start_lr': 1e-6
+        }
+    }
 }
 
 A100_OPTIMAL = {
@@ -31,7 +72,27 @@ A100_OPTIMAL = {
     'gradient_accum_steps': 1,  # No accumulation needed!
     'effective_batch': 256,
     'num_workers': 18,
-    'description': '✅ Perfect for A100, ~3-4 hours for full dataset'
+    'description': '✅ Perfect for A100, ~3-4 hours for full dataset',
+    'learning_rates': {
+        'linear_probe': {
+            'base_lr': 0.0008,
+            'lr_multiplier': 1.5,  # Higher LR for A100's capabilities
+            'warmup_epochs': 2,
+            'warmup_start_lr': 1e-5
+        },
+        'fine_tune': {
+            'base_lr': 0.0008,
+            'lr_multiplier': 1.5,
+            'warmup_epochs': 2,
+            'warmup_start_lr': 1e-5
+        },
+        'supervised': {
+            'base_lr': 0.0005,
+            'lr_multiplier': 1.5,
+            'warmup_epochs': 3,
+            'warmup_start_lr': 1e-6
+        }
+    }
 }
 
 A100_ULTRA = {
@@ -42,7 +103,27 @@ A100_ULTRA = {
     'num_workers': 18,
     'description': '🚀 Fastest possible, ~2-3 hours. Requires LR adjustment (×1.5)',
     'auto_scale_lr': True,
-    'lr_multiplier': 1.5
+    'lr_multiplier': 1.5,
+    'learning_rates': {
+        'linear_probe': {
+            'base_lr': 0.0008,
+            'lr_multiplier': 2.0,  # Higher multiplier for ultra-fast training
+            'warmup_epochs': 2,
+            'warmup_start_lr': 1e-5
+        },
+        'fine_tune': {
+            'base_lr': 0.0008,
+            'lr_multiplier': 2.0,
+            'warmup_epochs': 2,
+            'warmup_start_lr': 1e-5
+        },
+        'supervised': {
+            'base_lr': 0.0005,
+            'lr_multiplier': 2.0,
+            'warmup_epochs': 3,
+            'warmup_start_lr': 1e-6
+        }
+    }
 }
 
 # H100 presets
@@ -52,7 +133,27 @@ H100_OPTIMAL = {
     'gradient_accum_steps': 1,
     'effective_batch': 384,
     'num_workers': 18,
-    'description': '✅ Great for H100, ~2-3 hours for full dataset'
+    'description': '✅ Great for H100, ~2-3 hours for full dataset',
+    'learning_rates': {
+        'linear_probe': {
+            'base_lr': 0.0008,
+            'lr_multiplier': 1.8,  # H100 can handle higher LRs
+            'warmup_epochs': 2,
+            'warmup_start_lr': 1e-5
+        },
+        'fine_tune': {
+            'base_lr': 0.0008,
+            'lr_multiplier': 1.8,
+            'warmup_epochs': 2,
+            'warmup_start_lr': 1e-5
+        },
+        'supervised': {
+            'base_lr': 0.0005,
+            'lr_multiplier': 1.8,
+            'warmup_epochs': 3,
+            'warmup_start_lr': 1e-6
+        }
+    }
 }
 
 H100_ULTRA = {
@@ -63,7 +164,27 @@ H100_ULTRA = {
     'num_workers': 18,
     'description': '🚀 Fastest possible on H100, ~1.5-2.5 hours. Requires LR adjustment (×2.0). ⚠️ May OOM on very large models, test first',
     'auto_scale_lr': True,
-    'lr_multiplier': 2.0
+    'lr_multiplier': 2.0,
+    'learning_rates': {
+        'linear_probe': {
+            'base_lr': 0.0008,
+            'lr_multiplier': 2.5,  # Maximum multiplier for H100 ultra
+            'warmup_epochs': 2,
+            'warmup_start_lr': 1e-5
+        },
+        'fine_tune': {
+            'base_lr': 0.0008,
+            'lr_multiplier': 2.5,
+            'warmup_epochs': 2,
+            'warmup_start_lr': 1e-5
+        },
+        'supervised': {
+            'base_lr': 0.0005,
+            'lr_multiplier': 2.5,
+            'warmup_epochs': 3,
+            'warmup_start_lr': 1e-6
+        }
+    }
 }
 
 # =============================================================================
@@ -112,6 +233,53 @@ def get_scaled_lr(base_lr, base_batch=64, new_effective_batch=256, scaling_type=
         return base_lr * math.sqrt(ratio)
     else:
         raise ValueError(f"Unknown scaling_type: {scaling_type}")
+
+def apply_gpu_learning_rate_config(active_config, gpu_config, training_regime, model_type='cnn'):
+    """
+    Apply GPU-specific learning rate configuration to active_config
+    
+    Args:
+        active_config: The configuration object to modify
+        gpu_config: GPU configuration dictionary (e.g., A100_OPTIMAL)
+        training_regime: 'linear_probe', 'fine_tune', or 'supervised'
+        model_type: 'cnn', 'dinov2', or 'vit'
+    
+    Returns:
+        Modified active_config with GPU-optimized learning rates
+    """
+    if 'learning_rates' not in gpu_config:
+        print(f"⚠️ No learning_rates found in GPU config: {gpu_config.get('name', 'Unknown')}")
+        return active_config
+    
+    lr_config = gpu_config['learning_rates'].get(training_regime)
+    if not lr_config:
+        print(f"⚠️ No learning rate config for regime '{training_regime}' in GPU config")
+        return active_config
+    
+    # Apply base learning rate and multiplier
+    base_lr = lr_config['base_lr']
+    lr_multiplier = lr_config['lr_multiplier']
+    final_lr = base_lr * lr_multiplier
+    
+    # Model-specific adjustments
+    if model_type == 'vit' and training_regime == 'supervised':
+        # ViT supervised training needs slightly lower LR for stability
+        final_lr *= 0.8
+    
+    active_config.LEARNING_RATE = float(final_lr)
+    
+    # Apply warmup configuration
+    active_config.USE_WARMUP = True
+    active_config.WARMUP_EPOCHS = lr_config['warmup_epochs']
+    active_config.WARMUP_START_LR = lr_config['warmup_start_lr']
+    
+    print(f"🎯 GPU LR Config Applied:")
+    print(f"   Base LR: {base_lr:.6f}")
+    print(f"   Multiplier: {lr_multiplier:.2f}")
+    print(f"   Final LR: {final_lr:.6f}")
+    print(f"   Warmup: {lr_config['warmup_epochs']} epochs, start={lr_config['warmup_start_lr']:.1e}")
+    
+    return active_config
 
 # =============================================================================
 # EXAMPLES

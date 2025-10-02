@@ -36,7 +36,7 @@ except ImportError as e:
 
 # 🔧 OPTIONAL: GPU Configuration presets (comment out if not using)
 try:
-    from gpu_configs import L40S_CONSERVATIVE, A100_OPTIMAL, A100_ULTRA, H100_OPTIMAL, H100_ULTRA
+    from gpu_configs import L40S_CONSERVATIVE, A100_OPTIMAL, A100_ULTRA, H100_OPTIMAL, H100_ULTRA, apply_gpu_learning_rate_config
     GPU_CONFIGS_AVAILABLE = True
     print(" GPU configs imported - You can use preset configurations")
 except ImportError:
@@ -246,7 +246,7 @@ class SimpleConfig:
             self.RANDOM_STATE = getattr(config_module, 'RANDOM_STATE', 42)
 
 def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_value=0.1, 
-              experiment_context=None, comparison_logger=None):
+              experiment_context=None, comparison_logger=None, gpu_config=None):
     """Run single model training and return results"""
     # Select config (create a simple config object that can be safely modified)
     if model_type == 'dinov2':
@@ -695,7 +695,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
 
 def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_value=0.1, 
                          training_regime='supervised', freeze_backbone=False, random_seed=42, 
-                         experiment_context=None, comparison_logger=None):
+                         experiment_context=None, comparison_logger=None, gpu_config=None):
     """Run model with specific training regime (frozen vs fine-tuned)"""
     
     # Select and modify config based on training regime
@@ -723,13 +723,16 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
     model_name = original_model_name
     
     # 🔥 FAIR COMPETITION: Research-quality hyperparameters optimized for each strategy
-    # 📈 LEARNING RATE SCALING: Adjusted for effective batch 256 (4× from base batch 64)
+    # 📈 GPU-SPECIFIC LEARNING RATE CONFIGURATION: Dynamic scaling based on GPU capabilities
+    
+    # Get the current GPU configuration (passed from run_model function)
+    current_gpu_config = gpu_config
+    
     if training_regime == 'linear_probe':
         # Linear probe: freeze backbone, only train classifier head
         active_config.FREEZE_BACKBONE = True
         active_config.UNFREEZE_AFTER_EPOCH = int(999)  # Never unfreeze
         active_config.EPOCHS = int(2)  # Linear probe: quick convergence (was 5 for testing) #15
-        active_config.LEARNING_RATE = float(0.004)  # 0.001 × 4 (linear scaling for batch 256)
         active_config.WEIGHT_DECAY = float(0.01)
         
         # Model-specific dropout (pre-trained features need less regularization)
@@ -737,6 +740,16 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
             active_config.DROPOUT = float(0.1)  # Lower dropout for pre-trained features
         else:
             active_config.DROPOUT = float(0.15)  # Slightly higher for CNN/ViT linear probe
+        
+        # Apply GPU-specific learning rate configuration
+        if current_gpu_config and GPU_CONFIGS_AVAILABLE:
+            active_config = apply_gpu_learning_rate_config(active_config, current_gpu_config, 'linear_probe', model_type)
+        else:
+            # Fallback to manual configuration
+            active_config.LEARNING_RATE = float(0.004)  # 0.001 × 4 (linear scaling for batch 256)
+            active_config.USE_WARMUP = True
+            active_config.WARMUP_EPOCHS = 2
+            active_config.WARMUP_START_LR = 1e-5
             
         print(f"🧊 Linear probe: frozen backbone, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
         
@@ -745,9 +758,18 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
         active_config.FREEZE_BACKBONE = True
         active_config.UNFREEZE_AFTER_EPOCH = int(3)   # ✅ Early unfreeze
         active_config.EPOCHS = int(3)  # Fine-tuning: needs more epochs (was 8 for testing) 25
-        active_config.LEARNING_RATE = float(0.002)  # 0.0005 × 4 (linear scaling for batch 256)
         active_config.WEIGHT_DECAY = float(0.01)
         active_config.DROPOUT = float(0.1)  # Lower dropout for fine-tuning
+        
+        # Apply GPU-specific learning rate configuration
+        if current_gpu_config and GPU_CONFIGS_AVAILABLE:
+            active_config = apply_gpu_learning_rate_config(active_config, current_gpu_config, 'fine_tune', model_type)
+        else:
+            # Fallback to manual configuration
+            active_config.LEARNING_RATE = float(0.002)  # 0.0005 × 4 (linear scaling for batch 256)
+            active_config.USE_WARMUP = True
+            active_config.WARMUP_EPOCHS = 2
+            active_config.WARMUP_START_LR = 1e-5
             
         print(f"🔥 Fine-tune: progressive unfreeze @ epoch {active_config.UNFREEZE_AFTER_EPOCH}, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
         
@@ -757,16 +779,24 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
         active_config.EPOCHS = int(3)  # Supervised: full training from scratch 25
         active_config.WEIGHT_DECAY = float(0.01)
         
-        # Model-specific learning rates (scaled for batch 256)
-        if model_type == 'cnn':
-            active_config.LEARNING_RATE = float(0.001)   # 0.001 × 4 (linear scaling)
-            active_config.DROPOUT = float(0.2)           # Higher dropout for training from scratch
-        elif model_type == 'vit':
-            active_config.LEARNING_RATE = float(0.0005)  # Optimized LR for ViT stability
-            active_config.DROPOUT = float(0.15)          # Higher dropout for better generalization
-        else:  # dinov2 supervised (theoretical case)
-            active_config.LEARNING_RATE = float(0.0005)   # 0.0005 × 4 (linear scaling)
-            active_config.DROPOUT = float(0.1)
+        # Apply GPU-specific learning rate configuration
+        if current_gpu_config and GPU_CONFIGS_AVAILABLE:
+            active_config = apply_gpu_learning_rate_config(active_config, current_gpu_config, 'supervised', model_type)
+        else:
+            # Fallback to manual configuration - Model-specific learning rates (scaled for batch 256)
+            if model_type == 'cnn':
+                active_config.LEARNING_RATE = float(0.001)   # 0.001 × 4 (linear scaling)
+                active_config.DROPOUT = float(0.2)           # Higher dropout for training from scratch
+            elif model_type == 'vit':
+                active_config.LEARNING_RATE = float(0.0005)  # Optimized LR for ViT stability
+                active_config.DROPOUT = float(0.15)          # Higher dropout for better generalization
+            else:  # dinov2 supervised (theoretical case)
+                active_config.LEARNING_RATE = float(0.0005)   # 0.0005 × 4 (linear scaling)
+                active_config.DROPOUT = float(0.1)
+            
+            active_config.USE_WARMUP = True
+            active_config.WARMUP_EPOCHS = 3
+            active_config.WARMUP_START_LR = 1e-6
             
         print(f"🚀 Supervised: full training, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
     
@@ -834,7 +864,8 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
         few_shot_mode=few_shot_mode,
         few_shot_value=few_shot_value,
         experiment_context=experiment_context,
-        comparison_logger=comparison_logger
+        comparison_logger=comparison_logger,
+        gpu_config=gpu_config
     )
 
 def aggregate_results_by_condition(all_results):
@@ -1219,6 +1250,13 @@ def main():
                     # Modify config based on training regime
                     freeze_backbone = (regime == 'linear_probe')
                     
+                    # Get the current GPU configuration for this experiment
+                    current_gpu_config = None
+                    if GPU_CONFIGS_AVAILABLE:
+                        # Use the same GPU config that was set in run_model
+                        if 'GPU_CONFIG' in globals() and GPU_CONFIG is not None:
+                            current_gpu_config = GPU_CONFIG
+                    
                     result = run_model_with_regime(
                         model_type=model_type,
                         sample_size=SAMPLE_SIZE,
@@ -1228,7 +1266,8 @@ def main():
                         freeze_backbone=freeze_backbone,
                         random_seed=seed,
                         experiment_context=experiment_context,
-                        comparison_logger=comparison_logger
+                        comparison_logger=comparison_logger,
+                        gpu_config=current_gpu_config
                     )
                     
                     # Add experiment metadata  
