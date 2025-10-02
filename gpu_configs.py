@@ -30,7 +30,7 @@ A100_OPTIMAL = {
     'per_step_batch': 256,
     'gradient_accum_steps': 1,  # No accumulation needed!
     'effective_batch': 256,
-    'num_workers': 8,
+    'num_workers': 18,
     'description': '✅ Perfect for A100, ~3-4 hours for full dataset'
 }
 
@@ -39,7 +39,7 @@ A100_ULTRA = {
     'per_step_batch': 384,
     'gradient_accum_steps': 1,
     'effective_batch': 384,
-    'num_workers': 8,
+    'num_workers': 18,
     'description': '🚀 Fastest possible, ~2-3 hours. Requires LR adjustment (×1.5)',
     'auto_scale_lr': True,
     'lr_multiplier': 1.5
@@ -51,7 +51,7 @@ H100_OPTIMAL = {
     'per_step_batch': 384,
     'gradient_accum_steps': 1,
     'effective_batch': 384,
-    'num_workers': 8,
+    'num_workers': 18,
     'description': '✅ Great for H100, ~2-3 hours for full dataset'
 }
 
@@ -60,7 +60,7 @@ H100_ULTRA = {
     'per_step_batch': 512,
     'gradient_accum_steps': 1,
     'effective_batch': 512,
-    'num_workers': 8,
+    'num_workers': 18,
     'description': '🚀 Fastest possible on H100, ~1.5-2.5 hours. Requires LR adjustment (×2.0). ⚠️ May OOM on very large models, test first',
     'auto_scale_lr': True,
     'lr_multiplier': 2.0

@@ -28,7 +28,7 @@ try:
     from src.evaluation import evaluation
     from src.utils.logger_manager import ComparisonLogger, DataSplitterLogger
     from src.models.model_setup import get_model_identifier
-    print("✅ All modules imported successfully")
+    print(" All modules imported successfully")
 except ImportError as e:
     print(f"❌ Import error: {e}")
     print(f"Python path: {sys.path}")
@@ -38,10 +38,10 @@ except ImportError as e:
 try:
     from gpu_configs import L40S_CONSERVATIVE, A100_OPTIMAL, A100_ULTRA, H100_OPTIMAL, H100_ULTRA
     GPU_CONFIGS_AVAILABLE = True
-    print("✅ GPU configs imported - You can use preset configurations")
+    print(" GPU configs imported - You can use preset configurations")
 except ImportError:
     GPU_CONFIGS_AVAILABLE = False
-    print("ℹ️  GPU configs not found - Using manual configuration")
+    print("  GPU configs not found - Using manual configuration")
 
 SEED = 42
 random.seed(SEED)
@@ -49,9 +49,53 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 torch.cuda.manual_seed(SEED)  # torch.cuda.manual_seed_all is deprecated
 
-# GPU setup
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f"🚀 Device: {device}")
+# GPU setup and verification
+def check_gpu_status():
+    """Check and display GPU status information."""
+    print("=" * 60)
+    print("🔍 GPU DETECTION AND VERIFICATION")
+    print("=" * 60)
+    
+    cuda_available = torch.cuda.is_available()
+    print(f"CUDA Available: {cuda_available}")
+    
+    if not cuda_available:
+        print("❌ CUDA is not available!")
+        print("   Training will use CPU (much slower)")
+        return False, 'cpu'
+    
+    device_count = torch.cuda.device_count()
+    current_device = torch.cuda.current_device()
+    device_name = torch.cuda.get_device_name(current_device)
+    
+    print(f"Number of GPUs: {device_count}")
+    print(f"Current GPU: {current_device}")
+    print(f"GPU Name: {device_name}")
+    
+    # Get memory information
+    total_memory = torch.cuda.get_device_properties(current_device).total_memory
+    print(f"Total Memory: {total_memory / 1024**3:.2f} GB")
+    
+    # Test GPU computation
+    print(" Testing GPU computation...")
+    try:
+        x = torch.randn(100, 100).cuda()
+        y = torch.randn(100, 100).cuda()
+        z = torch.mm(x, y)
+        print(" GPU computation test passed!")
+        del x, y, z
+        torch.cuda.empty_cache()
+    except Exception as e:
+        print(f" GPU computation test failed: {e}")
+        return False, 'cpu'
+    
+    print("=" * 60)
+    return True, f'cuda:{current_device}'
+
+# Check GPU status
+gpu_available, device_name = check_gpu_status()
+device = torch.device(device_name)
+print(f"🚀 Using Device: {device}")
 
 def apply_label_hiding_few_shot(train_paths, train_labels, mode='percentage', value=0.1, random_state=42):
     """
@@ -80,7 +124,7 @@ def apply_label_hiding_few_shot(train_paths, train_labels, mode='percentage', va
     unique_classes = list(set(train_labels))
     num_classes = len(unique_classes)
     
-    print(f"🎯 Few-shot setup: {num_classes} classes, {total_samples} total samples")
+    print(f" Few-shot setup: {num_classes} classes, {total_samples} total samples")
     
     if mode == 'percentage':
         # Label only X% of data WITH STRATIFIED SAMPLING
@@ -88,7 +132,7 @@ def apply_label_hiding_few_shot(train_paths, train_labels, mode='percentage', va
         
         # Special case: Allow 0.0 for zero-shot learning (no labeled samples)
         if value == 0.0:
-            print(f"🚨 ZERO-SHOT MODE: No labeled samples (experimental)")
+            print(f" ZERO-SHOT MODE: No labeled samples (experimental)")
         else:
             # Validate: must have at least 1 labeled sample per class for supervised training
             if n_labeled < num_classes and n_labeled > 0:
@@ -125,7 +169,7 @@ def apply_label_hiding_few_shot(train_paths, train_labels, mode='percentage', va
                     labeled_indices.extend(selected)
             
             labeled_indices = np.array(labeled_indices)
-            print(f"🎯 Stratified sampling: {len(labeled_indices)} labeled samples across {num_classes} classes")
+            print(f" Stratified sampling: {len(labeled_indices)} labeled samples across {num_classes} classes")
         
     elif mode == 'per_class':
         # Label only X samples per class (this is already stratified by design)
@@ -144,7 +188,7 @@ def apply_label_hiding_few_shot(train_paths, train_labels, mode='percentage', va
                 labeled_indices.extend(selected)
         
         labeled_indices = np.array(labeled_indices)
-        print(f"🎯 Per-class sampling: {int(value)} samples per class × {num_classes} classes = {len(labeled_indices)} total")
+        print(f" Per-class sampling: {int(value)} samples per class × {num_classes} classes = {len(labeled_indices)} total")
     
     # ------------------------------------------------------------------
     # Efficient O(N) mask creation
@@ -222,10 +266,10 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
     # Choose ONE option below:
     
     # OPTION 1A: L40S 24GB (Safe) - ~7-8 hours
-    GPU_CONFIG = L40S_CONSERVATIVE if GPU_CONFIGS_AVAILABLE else None
+    # GPU_CONFIG = L40S_CONSERVATIVE if GPU_CONFIGS_AVAILABLE else None
     
     # OPTION 1B: A100 80GB (Optimal) - ~3-4 hours ⚡
-    # GPU_CONFIG = A100_OPTIMAL if GPU_CONFIGS_AVAILABLE else None
+    GPU_CONFIG = A100_OPTIMAL if GPU_CONFIGS_AVAILABLE else None
     
     # OPTION 1C: A100 80GB (Ultra-Fast) - ~2-3 hours 
     # GPU_CONFIG = A100_ULTRA if GPU_CONFIGS_AVAILABLE else None
@@ -242,7 +286,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         EFFECTIVE_BATCH = GPU_CONFIG['effective_batch']
         NUM_WORKERS = GPU_CONFIG['num_workers']
         print(f"🔧 Using preset: {GPU_CONFIG['name']}")
-        print(f"📊 {GPU_CONFIG['description']}")
+        print(f" {GPU_CONFIG['description']}")
         # Auto-scale learning rate when the preset declares it
         if GPU_CONFIG.get('auto_scale_lr', False):
             base_lr = active_config.LEARNING_RATE
@@ -684,7 +728,7 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
         # Linear probe: freeze backbone, only train classifier head
         active_config.FREEZE_BACKBONE = True
         active_config.UNFREEZE_AFTER_EPOCH = int(999)  # Never unfreeze
-        active_config.EPOCHS = int(5)  # Linear probe: quick convergence (was 5 for testing) #15
+        active_config.EPOCHS = int(2)  # Linear probe: quick convergence (was 5 for testing) #15
         active_config.LEARNING_RATE = float(0.004)  # 0.001 × 4 (linear scaling for batch 256)
         active_config.WEIGHT_DECAY = float(0.01)
         
@@ -700,7 +744,7 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
         # Fine-tuning: progressive unfreezing (only for DiNO, but keeping general)
         active_config.FREEZE_BACKBONE = True
         active_config.UNFREEZE_AFTER_EPOCH = int(3)   # ✅ Early unfreeze
-        active_config.EPOCHS = int(8)  # Fine-tuning: needs more epochs (was 8 for testing) 25
+        active_config.EPOCHS = int(3)  # Fine-tuning: needs more epochs (was 8 for testing) 25
         active_config.LEARNING_RATE = float(0.002)  # 0.0005 × 4 (linear scaling for batch 256)
         active_config.WEIGHT_DECAY = float(0.01)
         active_config.DROPOUT = float(0.1)  # Lower dropout for fine-tuning
@@ -710,7 +754,7 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
     else:  # supervised
         # Supervised: full training from scratch
         active_config.FREEZE_BACKBONE = False
-        active_config.EPOCHS = int(8)  # Supervised: full training from scratch 25
+        active_config.EPOCHS = int(3)  # Supervised: full training from scratch 25
         active_config.WEIGHT_DECAY = float(0.01)
         
         # Model-specific learning rates (scaled for batch 256)
@@ -839,7 +883,7 @@ def aggregate_results_by_condition(all_results):
 def print_statistical_summary(aggregated_results):
     """Print statistical summary of results"""
     print("\n" + "="*80)
-    print("📊 STATISTICAL SUMMARY (Mean ± Std)")
+    print(" STATISTICAL SUMMARY (Mean ± Std)")
     print("="*80)
     
     # Sort by budget value for easy comparison
@@ -859,7 +903,7 @@ def print_statistical_summary(aggregated_results):
         budget_str = f"{stats['budget_mode']}={stats['budget_value']}"
         
         if budget_str != current_budget:
-            print(f"\n🎯 Label Budget: {budget_str}")
+            print(f"\n Label Budget: {budget_str}")
             print("-" * 50)
             current_budget = budget_str
         
@@ -873,7 +917,6 @@ def print_statistical_summary(aggregated_results):
     print("\n" + "="*80)
 
 def print_experiment_console_summary(all_results, start_time, end_time, output_file='outputs/experiment_summary.txt'):
-    """Print experiment summary to console and save to file"""
     from pathlib import Path
     
     # Ensure output directory exists
@@ -884,7 +927,7 @@ def print_experiment_console_summary(all_results, start_time, end_time, output_f
     # Build summary content
     summary_lines = []
     summary_lines.append("="*80)
-    summary_lines.append("🎯 EXPERIMENT SUMMARY")
+    summary_lines.append( "EXPERIMENT SUMMARY")
     summary_lines.append("="*80)
     summary_lines.append(f"⏱️ Total experiment time: {total_time:.1f} seconds ({total_time/60:.1f} minutes)")
     summary_lines.append("")
@@ -893,7 +936,7 @@ def print_experiment_console_summary(all_results, start_time, end_time, output_f
     successful_results = [r for r in all_results if r.get('success', False)]
     failed_results = [r for r in all_results if not r.get('success', False)]
     
-    summary_lines.append(f"📊 EXPERIMENT OVERVIEW:")
+    summary_lines.append(f" EXPERIMENT OVERVIEW:")
     summary_lines.append(f"   Total experiments: {len(all_results)}")
     summary_lines.append(f"   Successful: {len(successful_results)}")
     summary_lines.append(f"   Failed: {len(failed_results)}")
@@ -901,7 +944,7 @@ def print_experiment_console_summary(all_results, start_time, end_time, output_f
     
     if successful_results:
         best = max(successful_results, key=lambda x: float(x.get('test_accuracy', 0) or 0))
-        summary_lines.append("🏆 BEST PERFORMING MODEL:")
+        summary_lines.append(" BEST PERFORMING MODEL:")
         summary_lines.append(f"   Model Type: {best['model_type'].upper()}")
         summary_lines.append(f"   Training Regime: {best.get('training_regime', 'N/A')}")
         summary_lines.append(f"   Test Accuracy: {best['test_accuracy']:.2f}%")
@@ -921,7 +964,7 @@ def print_experiment_console_summary(all_results, start_time, end_time, output_f
         summary_lines.append("❌ No successful models to report best from.")
     
     summary_lines.append("")
-    summary_lines.append("📋 DETAILED EXPERIMENT RESULTS:")
+    summary_lines.append(" DETAILED EXPERIMENT RESULTS:")
     summary_lines.append("-" * 80)
     summary_lines.append(f"{'#':<3} {'Model':<10} {'Regime':<12} {'Budget':<10} {'Train Acc':<10} {'Test Acc':<10} {'Time (s)':<10} {'Model Name':<30}")
     summary_lines.append("-" * 80)
@@ -947,7 +990,7 @@ def print_experiment_console_summary(all_results, start_time, end_time, output_f
     # Add failed experiments if any
     if failed_results:
         summary_lines.append("")
-        summary_lines.append("❌ FAILED EXPERIMENTS:")
+        summary_lines.append(" FAILED EXPERIMENTS:")
         summary_lines.append("-" * 80)
         for idx, r in enumerate(failed_results, 1):
             summary_lines.append(f"{idx:<3} {r['model_type']:<10} {r.get('training_regime', 'N/A'):<12} Error: {r.get('error', 'Unknown error')[:50]}")
@@ -955,7 +998,7 @@ def print_experiment_console_summary(all_results, start_time, end_time, output_f
     # Add detailed comparison results section
     summary_lines.append("")
     summary_lines.append("="*80)
-    summary_lines.append("📊 DETAILED COMPARISON RESULTS")
+    summary_lines.append(" DETAILED COMPARISON RESULTS")
     summary_lines.append("="*80)
     
     # Group results by budget for better organization
@@ -968,7 +1011,7 @@ def print_experiment_console_summary(all_results, start_time, end_time, output_f
     
     for budget_pct in sorted(budget_groups.keys()):
         budget_results = budget_groups[budget_pct]
-        summary_lines.append(f"\n🎯 LABEL BUDGET: {int(budget_pct)}%")
+        summary_lines.append(f"\n LABEL BUDGET: {int(budget_pct)}%")
         summary_lines.append("-" * 60)
         
         for result in budget_results:
@@ -1014,7 +1057,7 @@ def print_experiment_console_summary(all_results, start_time, end_time, output_f
     
     # Add winner analysis
     if successful_results:
-        summary_lines.append("🏆 WINNER ANALYSIS:")
+        summary_lines.append(" WINNER ANALYSIS:")
         summary_lines.append("-" * 40)
         
         # Find best model overall
@@ -1036,7 +1079,7 @@ def print_experiment_console_summary(all_results, start_time, end_time, output_f
         summary_lines.append("")
     
     summary_lines.append("="*80)
-    summary_lines.append("📁 OUTPUT FILES:")
+    summary_lines.append(" OUTPUT FILES:")
     summary_lines.append("   - Detailed results: outputs/comparison_results/")
     summary_lines.append("   - Model checkpoints: outputs/checkpoints/")
     summary_lines.append("   - Training logs: outputs/logs/")
@@ -1053,7 +1096,7 @@ def print_experiment_console_summary(all_results, start_time, end_time, output_f
     try:
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(summary_text)
-        print(f"\n📄 Experiment summary saved to: {output_file}")
+        print(f"\n Experiment summary saved to: {output_file}")
     except Exception as e:
         print(f"⚠️ Could not save experiment summary to file: {e}")
     
@@ -1103,9 +1146,9 @@ def main():
         'vit': ['supervised']   # ViT: supervised only (training from scratch)
     }
     
-    print(f"🎯 Dataset: {SAMPLE_SIZE:,} samples ({SAMPLE_SIZE/total_dataset_size*100:.1f}% of {total_dataset_size:,})")
-    print(f"🎯 Label budgets: {len(LABEL_BUDGETS)} budgets × {len(RANDOM_SEEDS)} seeds × models")
-    print(f"🎯 Training regimes: {TRAINING_REGIMES}")
+    print(f" Dataset: {SAMPLE_SIZE:,} samples ({SAMPLE_SIZE/total_dataset_size*100:.1f}% of {total_dataset_size:,})")
+    print(f" Label budgets: {len(LABEL_BUDGETS)} budgets × {len(RANDOM_SEEDS)} seeds × models")
+    print(f" Training regimes: {TRAINING_REGIMES}")
     
     # 🤖 MODEL SELECTION 
     model_types = [
@@ -1135,12 +1178,12 @@ def main():
         label_desc = f"{int(budget_value*100)}%" if budget_mode == 'percentage' else f"{budget_value}/class"
         
         print(f"\n" + "="*80)
-        print(f"🔥 LABEL BUDGET {budget_idx}/{len(LABEL_BUDGETS)}: {label_desc} of training labels visible")
-        print(f"   📊 Mode: {budget_mode} | Value: {budget_value}")
+        print(f" LABEL BUDGET {budget_idx}/{len(LABEL_BUDGETS)}: {label_desc} of training labels visible")
+        print(f"    Mode: {budget_mode} | Value: {budget_value}")
         print("="*80)
         
         for seed in RANDOM_SEEDS:
-            print(f"\n🎲 Random seed: {seed}")
+            print(f"\n Random seed: {seed}")
             
             # Update global seed
             random.seed(seed)
@@ -1158,8 +1201,8 @@ def main():
                     label_desc = f"{int(budget_value*100)}%" if budget_mode == 'percentage' else f"{budget_value}/class"
                     experiment_title = f"{model_type.upper()}-{regime.upper()}, {label_desc} labels"
                     
-                    print(f"\n🚀 EXPERIMENT [{experiment_count}/{total_experiments}]: {experiment_title}")
-                    print(f"   🎲 Seed: {seed} | 🏷️ Budget: {budget_mode}={budget_value}")
+                    print(f"\n EXPERIMENT [{experiment_count}/{total_experiments}]: {experiment_title}")
+                    print(f"    Seed: {seed} | Budget: {budget_mode}={budget_value}")
                     
                     # Create experiment context for logging
                     experiment_context = {
@@ -1206,15 +1249,15 @@ def main():
                         test_acc = result.get('test_accuracy', 0)
                         train_acc = result.get('train_accuracy', 0)
                         model_path = result.get('best_model_path', 'No path available')
-                        print(f"   ✅ COMPLETED: Train={train_acc:.1f}%, Test={test_acc:.1f}%")
+                        print(f"    COMPLETED: Train={train_acc:.1f}%, Test={test_acc:.1f}%")
                         if model_path and model_path != 'No path available':
                             print(f"   💾 Model saved: {model_path}")
                         else:
                             print(f"   💾 Model saved as: {result.get('model_name', 'unknown')}")
                     else:
-                        print(f"   ❌ FAILED: {result.get('error', 'Unknown error')}")
+                        print(f"    FAILED: {result.get('error', 'Unknown error')}")
                     
-                    print(f"   📈 Progress: {experiment_count}/{total_experiments} experiments done")
+                    print(f"    Progress: {experiment_count}/{total_experiments} experiments done")
                     print("   " + "="*60)
                     
                     # Clear GPU cache
@@ -1242,18 +1285,18 @@ def main():
                 key = f"{stats['model_type']}_{stats['training_regime']}_{stats['budget_mode']}{stats['budget_value']}"
                 json_compatible[key] = stats
             json.dump(json_compatible, f, indent=2)
-        print(f"📊 Aggregated results saved to: {aggregated_file}")
+        print(f" Aggregated results saved to: {aggregated_file}")
     except Exception as e:
         print(f"⚠️ Could not save aggregated results: {e}")
     
     # 🎉 FINAL EXPERIMENT SUMMARY
     print(f"\n" + "="*80)
-    print(f"🎉 COMPREHENSIVE EXPERIMENT COMPLETED!")
-    print(f"📊 Total experiments run: {len(all_results)}")
-    print(f"✅ Successful: {sum(1 for r in all_results if r.get('success', False))}")
-    print(f"❌ Failed: {sum(1 for r in all_results if not r.get('success', False))}")
-    print(f"📁 Results saved to: {results_file}")
-    print(f"📁 Aggregated results: {aggregated_file}")
+    print(f" COMPREHENSIVE EXPERIMENT COMPLETED!")
+    print(f" Total experiments run: {len(all_results)}")
+    print(f" Successful: {sum(1 for r in all_results if r.get('success', False))}")
+    print(f" Failed: {sum(1 for r in all_results if not r.get('success', False))}")
+    print(f" Results saved to: {results_file}")
+    print(f" Aggregated results: {aggregated_file}")
     
     # 💾 SAVED MODELS SUMMARY
     print(f"\n💾 SAVED MODELS SUMMARY:")
@@ -1266,10 +1309,10 @@ def main():
             test_acc = result.get('test_accuracy', 0)
             model_path = result.get('best_model_path', 'No path')
             
-            print(f"📌 {experiment_title}: {test_acc:.1f}%")
+            print(f" {experiment_title}: {test_acc:.1f}%")
             print(f"   🔧 Model ID: {model_name}")
             if model_path and model_path != 'No path':
-                print(f"   📁 Path: {model_path}")
+                print(f"    Path: {model_path}")
             print()
     else:
         print("   No models were successfully saved.")

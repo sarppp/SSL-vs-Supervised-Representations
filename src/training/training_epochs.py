@@ -1,7 +1,7 @@
 import torch
 import os
 from torch import autocast
-from torch.cuda.amp import GradScaler
+from torch.amp import GradScaler
 from tqdm import tqdm
 import datetime
 import glob
@@ -36,7 +36,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False
             training_logger.logger.info(f"📈 Gradient accumulation: {gradient_accum_steps} steps, effective batch: {effective_batch_size}")
 
     # Create a single GradScaler per epoch (recommended) rather than one per batch
-    scaler = GradScaler(enabled=use_amp and device.type == 'cuda')
+    scaler = GradScaler('cuda', enabled=use_amp and device.type == 'cuda')
 
     pbar = tqdm(train_loader, desc="Training", leave=False)
 

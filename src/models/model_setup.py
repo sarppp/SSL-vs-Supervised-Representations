@@ -512,6 +512,12 @@ def create_scheduler(optimizer, config=None, setup_logger=None):
     # Check if warmup is enabled in config (won't break if not defined)
     use_warmup = getattr(config, 'USE_WARMUP', False)
     
+    # ReduceLROnPlateau cannot be used with SequentialLR (warmup)
+    if use_warmup and scheduler_name == 'plateau':
+        if setup_logger:
+            setup_logger.logger.warning("⚠️  Warmup disabled for plateau scheduler (incompatible with SequentialLR)")
+        use_warmup = False
+    
     if use_warmup:
         warmup_epochs = getattr(config, 'WARMUP_EPOCHS', 3)
         warmup_start_lr = getattr(config, 'WARMUP_START_LR', 1e-6)
@@ -539,11 +545,36 @@ def create_scheduler(optimizer, config=None, setup_logger=None):
     
     return main_scheduler
 
+def check_gpu_status(setup_logger=None):
+    """Check and log GPU status information."""
+    if setup_logger:
+        setup_logger.logger.info("🔍 Checking GPU status...")
+    
+    cuda_available = torch.cuda.is_available()
+    if not cuda_available:
+        if setup_logger:
+            setup_logger.logger.error("❌ CUDA is not available! Training will use CPU.")
+        return False, None
+    
+    device_count = torch.cuda.device_count()
+    current_device = torch.cuda.current_device()
+    device_name = torch.cuda.get_device_name(current_device)
+    
+    if setup_logger:
+        setup_logger.logger.info(f"✅ CUDA Available: {cuda_available}")
+        setup_logger.logger.info(f"📱 GPU {current_device}: {device_name}")
+        setup_logger.logger.info(f"💾 Total Memory: {torch.cuda.get_device_properties(current_device).total_memory / 1024**3:.2f} GB")
+    
+    return True, f"cuda:{current_device}"
+
 def setup_training(model, class_weights_tensor, config=None, setup_logger=None):
     """Setup model, criterion, optimizer, and scheduler."""
     
     if config is None:
         raise ValueError("You must provide a config module!")
+    
+    # Check GPU status first
+    gpu_available, device_name = check_gpu_status(setup_logger)
     
     # Create logger if not provided
     if setup_logger is None:
