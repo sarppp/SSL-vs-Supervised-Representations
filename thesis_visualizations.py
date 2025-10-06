@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🎓 Master Thesis Visualizations: Supervised vs Self-Supervised Models
+Master Thesis Visualizations: Supervised vs Self-Supervised Models
 Comprehensive comparison of CNN, DINOv2, and ViT models for crop pest classification
 """
 
@@ -344,10 +344,10 @@ class ThesisVisualizer:
         # Save the plot
         if suffix:
             save_path = self.viz_dir / f"training_curves_{suffix}.png"
-            print(f"✅ Training curves ({percentage}% labels) saved to: {save_path}")
+            print(f"Training curves ({percentage}% labels) saved to: {save_path}")
         else:
             save_path = self.viz_dir / "training_curves.png"
-            print(f"✅ Training curves saved to: {save_path}")
+            print(f"Training curves saved to: {save_path}")
             
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         return fig
@@ -364,7 +364,7 @@ class ThesisVisualizer:
             comparison_data = self.create_comparison_data_from_checkpoints(filtered_data['checkpoint_data'], percentage)
             
         if not comparison_data:
-            print(f"❌ No comparison data available for {percentage}% labels")
+            print(f" No comparison data available for {percentage}% labels")
             return None
         
         # Create title based on percentage
@@ -485,10 +485,10 @@ class ThesisVisualizer:
         if percentage:
             suffix = self.label_percentages[percentage]['suffix']
             save_path = self.viz_dir / f"performance_comparison_{suffix}.png"
-            print(f"✅ Performance comparison ({percentage}% labels) saved to: {save_path}")
+            print(f"Performance comparison ({percentage}% labels) saved to: {save_path}")
         else:
             save_path = self.viz_dir / "performance_comparison.png"
-            print(f"✅ Performance comparison saved to: {save_path}")
+            print(f"Performance comparison saved to: {save_path}")
             
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         return fig
@@ -505,7 +505,7 @@ class ThesisVisualizer:
             return self.create_simple_accuracy_chart(filtered_data['checkpoint_data'], percentage)
             
         if not training_data:
-            print(f"❌ No training data available for {percentage}% labels")
+            print(f" No training data available for {percentage}% labels")
             return None
         
         # Create title based on percentage
@@ -597,10 +597,10 @@ class ThesisVisualizer:
         if percentage:
             suffix = self.label_percentages[percentage]['suffix']
             save_path = self.viz_dir / f"training_curves_{suffix}.png"
-            print(f"✅ Training curves ({percentage}% labels) saved to: {save_path}")
+            print(f"Training curves ({percentage}% labels) saved to: {save_path}")
         else:
             save_path = self.viz_dir / "training_curves.png"
-            print(f"✅ Training curves saved to: {save_path}")
+            print(f"Training curves saved to: {save_path}")
             
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         return fig
@@ -619,7 +619,7 @@ class ThesisVisualizer:
             comparison_data = self.create_comparison_data_from_checkpoints(filtered_data['checkpoint_data'], percentage)
             
         if not comparison_data:
-            print(f"❌ No comparison data available for {percentage}% labels")
+            print(f" No comparison data available for {percentage}% labels")
             return None
         
         # Create title based on percentage
@@ -756,10 +756,10 @@ class ThesisVisualizer:
         if percentage:
             suffix = self.label_percentages[percentage]['suffix']
             save_path = self.viz_dir / f"architecture_comparison_{suffix}.png"
-            print(f"✅ Architecture comparison ({percentage}% labels) saved to: {save_path}")
+            print(f"Architecture comparison ({percentage}% labels) saved to: {save_path}")
         else:
             save_path = self.viz_dir / "architecture_comparison.png"
-            print(f"✅ Architecture comparison saved to: {save_path}")
+            print(f"Architecture comparison saved to: {save_path}")
             
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         return fig
@@ -776,7 +776,7 @@ class ThesisVisualizer:
             comparison_data = self.create_comparison_data_from_checkpoints(filtered_data['checkpoint_data'], percentage)
             
         if not comparison_data:
-            print(f"❌ No comparison data available for {percentage}% labels")
+            print(f" No comparison data available for {percentage}% labels")
             return None
         
         models = comparison_data['model_results']
@@ -844,10 +844,10 @@ class ThesisVisualizer:
         if percentage:
             suffix = self.label_percentages[percentage]['suffix']
             save_path = self.viz_dir / f"summary_table_{suffix}.png"
-            print(f"✅ Summary table ({percentage}% labels) saved to: {save_path}")
+            print(f"Summary table ({percentage}% labels) saved to: {save_path}")
         else:
             save_path = self.viz_dir / "summary_table.png"
-            print(f"✅ Summary table saved to: {save_path}")
+            print(f"Summary table saved to: {save_path}")
             
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         return fig
@@ -888,16 +888,16 @@ class ThesisVisualizer:
     
     def generate_all_visualizations(self):
         """Generate all visualizations for the thesis, separated by label percentage"""
-        print("🎓 Generating Master Thesis Visualizations...")
+        print("Generating Master Thesis Visualizations...")
         print("=" * 60)
         
-        print(f"🔍 Available label percentages: {', '.join([self.label_percentages[p]['name'] for p in self.available_percentages])}")
+        print(f"Available label percentages: {', '.join([self.label_percentages[p]['name'] for p in self.available_percentages])}")
         
         all_generated_plots = []
         
         # Generate visualizations for each available percentage
         for percentage in self.available_percentages:
-            print(f"\n📊 Generating visualizations for {self.label_percentages[percentage]['name']}...")
+            print(f"\nGenerating visualizations for {self.label_percentages[percentage]['name']}...")
             print("-" * 40)
             
             # Filter data for this percentage
@@ -914,27 +914,27 @@ class ThesisVisualizer:
             generated_plots = []
             
             for name, func in viz_functions:
-                print(f"\n  📈 Creating {name} for {percentage}% labels...")
+                print(f"\n  Creating {name} for {percentage}% labels...")
                 try:
                     fig = func(percentage=percentage, filtered_data=filtered_data)
                     if fig:
                         generated_plots.append(f"{name} ({percentage}% labels)")
                         plt.close(fig)  # Close to free memory
                     else:
-                        print(f"  ⚠️ Skipping {name} for {percentage}% labels (no data)")
+                        print(f"  WARNING: Skipping {name} for {percentage}% labels (no data)")
                 except Exception as e:
-                    print(f"  ❌ Error creating {name} for {percentage}% labels: {e}")
+                    print(f"   Error creating {name} for {percentage}% labels: {e}")
             
             all_generated_plots.extend(generated_plots)
-            print(f"\n  ✅ Generated {len(generated_plots)} visualizations for {percentage}% labels")
+            print(f"\n  Generated {len(generated_plots)} visualizations for {percentage}% labels")
         
         print("\n" + "=" * 60)
-        print(f"✅ Generated {len(all_generated_plots)} total visualizations:")
+        print(f"Generated {len(all_generated_plots)} total visualizations:")
         for plot in all_generated_plots:
-            print(f"   📈 {plot}")
+            print(f"   {plot}")
         
-        print(f"\n📁 All visualizations saved to: {self.viz_dir}")
-        print("\n🎯 Key Findings by Label Percentage:")
+        print(f"\n All visualizations saved to: {self.viz_dir}")
+        print("\nKey Findings by Label Percentage:")
         
         for percentage in self.available_percentages:
             filtered_data = self.filter_data_by_percentage(percentage)
@@ -942,7 +942,7 @@ class ThesisVisualizer:
                 models = filtered_data['comparison_data']['model_results']
                 if models:
                     best_model = max(models, key=lambda x: x['test_accuracy'])
-                    print(f"   🏆 {self.label_percentages[percentage]['name']}: {best_model['model_name']} ({best_model['test_accuracy']:.1f}% accuracy)")
+                    print(f"   {self.label_percentages[percentage]['name']}: {best_model['model_name']} ({best_model['test_accuracy']:.1f}% accuracy)")
         
         return all_generated_plots
 
@@ -950,7 +950,7 @@ def main():
     """Main function to generate all thesis visualizations by label percentage"""
     visualizer = ThesisVisualizer()
     if not visualizer.available_percentages:
-        print("❌ No models found with recognizable label percentages")
+        print(" No models found with recognizable label percentages")
         print("Available model names in data:")
         if visualizer.comparison_data and 'model_results' in visualizer.comparison_data:
             for model in visualizer.comparison_data['model_results']:

@@ -49,21 +49,21 @@ try:
     from src.config import config
     from src.config import config_dinov2
 except ImportError as e:
-    print(f"❌ Could not import required modules: {e}")
+    print(f" Could not import required modules: {e}")
     print("Make sure the src directory structure is correct.")
     sys.exit(1)
 
 
 def setup_environment():
     """Setup environment and check requirements."""
-    print("🔧 Setting up environment...")
+    print("Setting up environment...")
     
     # Check CUDA availability
     if torch.cuda.is_available():
-        print(f"✅ CUDA available: {torch.cuda.get_device_name()}")
+        print(f"CUDA available: {torch.cuda.get_device_name()}")
         print(f"   GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
     else:
-        print("⚠️  CUDA not available - using CPU (will be slow)")
+        print("WARNING: CUDA not available - using CPU (will be slow)")
     
     # Check required files
     required_files = [
@@ -77,59 +77,59 @@ def setup_environment():
             missing_files.append(file_path)
     
     if missing_files:
-        print(f"❌ Missing required files: {missing_files}")
+        print(f" Missing required files: {missing_files}")
         print("   Please ensure you have:")
         print(f"   - {config_paths.CLEAN_DATASET_PICKLE} (cleaned dataset)")
         print(f"   - {config_paths.BASE_DATA_DIR}/ (image directory)")
         sys.exit(1)
     
-    print("✅ Environment check passed!")
+    print("Environment check passed!")
 
 
 def select_config(model_name):
     """Select appropriate config based on model type."""
     if model_name and model_name.startswith('dinov2'):
-        print(f"🦕 Using DINOv2-specific configuration for {model_name}")
+        print(f" Using DINOv2-specific configuration for {model_name}")
         return config_dinov2
     else:
-        print(f"🤖 Using standard configuration for {model_name}")
+        print(f" Using standard configuration for {model_name}")
         return config
 
 def override_config(args, cfg):
     """Override config values with command line arguments."""
     if args.epochs:
         cfg.EPOCHS = args.epochs
-        print(f"📊 Config override: EPOCHS = {cfg.EPOCHS}")
+        print(f"Config override: EPOCHS = {cfg.EPOCHS}")
     
     if args.batch_size:
         cfg.BATCH_SIZE = args.batch_size
-        print(f"📊 Config override: BATCH_SIZE = {cfg.BATCH_SIZE}")
+        print(f"Config override: BATCH_SIZE = {cfg.BATCH_SIZE}")
     
     if args.learning_rate:
         cfg.OPTIMIZER_PARAMS[cfg.OPTIMIZER]['lr'] = args.learning_rate
-        print(f"📊 Config override: LEARNING_RATE = {cfg.OPTIMIZER_PARAMS[cfg.OPTIMIZER]['lr']}")
+        print(f"Config override: LEARNING_RATE = {cfg.OPTIMIZER_PARAMS[cfg.OPTIMIZER]['lr']}")
     
     if args.model:
         cfg.MODEL_NAME = args.model
-        print(f"📊 Config override: MODEL_NAME = {cfg.MODEL_NAME}")
+        print(f"Config override: MODEL_NAME = {cfg.MODEL_NAME}")
     
     if args.image_size:
         cfg.IMAGE_SIZE = (args.image_size, args.image_size)
-        print(f"📊 Config override: IMAGE_SIZE = {cfg.IMAGE_SIZE}")
+        print(f"Config override: IMAGE_SIZE = {cfg.IMAGE_SIZE}")
     
     if args.patience:
         cfg.EARLY_STOPPING_PATIENCE = args.patience
-        print(f"📊 Config override: EARLY_STOPPING_PATIENCE = {cfg.EARLY_STOPPING_PATIENCE}")
+        print(f"Config override: EARLY_STOPPING_PATIENCE = {cfg.EARLY_STOPPING_PATIENCE}")
     
     # Apply model-specific configs if available and not overridden by user
     if hasattr(cfg, 'MODEL_CONFIGS') and cfg.MODEL_NAME in cfg.MODEL_CONFIGS:
         model_cfg = cfg.MODEL_CONFIGS[cfg.MODEL_NAME]
         if not args.learning_rate and 'learning_rate' in model_cfg:
             cfg.OPTIMIZER_PARAMS[cfg.OPTIMIZER]['lr'] = model_cfg['learning_rate']
-            print(f"🎯 Auto-config: Learning rate = {model_cfg['learning_rate']} for {cfg.MODEL_NAME}")
+            print(f"Auto-config: Learning rate = {model_cfg['learning_rate']} for {cfg.MODEL_NAME}")
         if not args.batch_size and 'batch_size' in model_cfg:
             cfg.BATCH_SIZE = model_cfg['batch_size']
-            print(f"🎯 Auto-config: Batch size = {model_cfg['batch_size']} for {cfg.MODEL_NAME}")
+            print(f"Auto-config: Batch size = {model_cfg['batch_size']} for {cfg.MODEL_NAME}")
         if 'weight_decay' in model_cfg:
             cfg.OPTIMIZER_PARAMS[cfg.OPTIMIZER]['weight_decay'] = model_cfg['weight_decay']
         if 'dropout' in model_cfg:
@@ -138,7 +138,7 @@ def override_config(args, cfg):
 
 def main():
     """Main training pipeline."""
-    parser = argparse.ArgumentParser(description='🌾 Crop Pest Detection Training')
+    parser = argparse.ArgumentParser(description=' Crop Pest Detection Training')
     parser.add_argument('--epochs', type=int, help='Number of training epochs')
     parser.add_argument('--batch-size', type=int, help='Batch size for training')
     parser.add_argument('--learning-rate', type=float, help='Learning rate')
@@ -157,7 +157,7 @@ def main():
     
     args = parser.parse_args()
     
-    print("🌾 CROP PEST DETECTION - STANDALONE TRAINING")
+    print(" CROP PEST DETECTION - STANDALONE TRAINING")
     print("=" * 50)
     
     # Setup environment
@@ -169,14 +169,14 @@ def main():
     # Setup few-shot learning if specified
     if args.few_shot:
         if not args.few_shot_value:
-            print("❌ --few-shot-value is required when using --few-shot")
+            print(" --few-shot-value is required when using --few-shot")
             sys.exit(1)
         cfg.FEW_SHOT_MODE = args.few_shot
         cfg.FEW_SHOT_VALUE = args.few_shot_value
         # Override random seed if provided for few-shot reproducibility
         if args.few_shot_seed != 42:  # Only override if user specified a different seed
             cfg.RANDOM_STATE = args.few_shot_seed
-        print(f"\n🎯 FEW-SHOT LEARNING ENABLED:")
+        print(f"\nFEW-SHOT LEARNING ENABLED:")
         print(f"   Mode: {cfg.FEW_SHOT_MODE}")
         print(f"   Value: {cfg.FEW_SHOT_VALUE}")
         print(f"   Seed: {cfg.RANDOM_STATE}")
@@ -189,11 +189,11 @@ def main():
     
     # Override config with command line args
     if any(vars(args).values()):
-        print("\n📊 Configuration Overrides:")
+        print("\nConfiguration Overrides:")
         override_config(args, cfg)
     
     # Display current configuration
-    print(f"\n⚙️  TRAINING CONFIGURATION:")
+    print(f"\nTRAINING CONFIGURATION:")
     print(f"   Model: {cfg.MODEL_NAME}")
     print(f"   Image Size: {cfg.IMAGE_SIZE}")
     print(f"   Batch Size: {cfg.BATCH_SIZE}")
@@ -205,54 +205,54 @@ def main():
     
     # Show few-shot configuration
     if hasattr(cfg, 'FEW_SHOT_MODE') and cfg.FEW_SHOT_MODE is not None:
-        print(f"   🎯 Few-shot: {cfg.FEW_SHOT_MODE} ({cfg.FEW_SHOT_VALUE}) - Label Hiding")
+        print(f"   Few-shot: {cfg.FEW_SHOT_MODE} ({cfg.FEW_SHOT_VALUE}) - Label Hiding")
     else:
-        print(f"   🎯 Few-shot: Disabled")
+        print(f"   Few-shot: Disabled")
     
     # Create save directory if it doesn't exist
     os.makedirs(cfg.SAVE_DIR, exist_ok=True)
     
     # Test-only mode
     if args.test_only:
-        print(f"\n🧪 TEST-ONLY MODE")
+        print(f"\n TEST-ONLY MODE")
         print(f"Loading model: {args.test_only}")
         
         # Still need data for testing (no few-shot for test-only mode)
-        print("\n📂 STEP 1: Loading and splitting dataset...")
+        print("\n STEP 1: Loading and splitting dataset...")
         train_paths, train_labels, val_paths, val_labels, test_paths, test_labels = data_splitter.split_clean_dataset(
             pickle_path=config_paths.CLEAN_DATASET_PICKLE,
             base_data_dir=config_paths.BASE_DATA_DIR,
             few_shot_mode=None  # Disable few-shot for test-only mode
         )
         
-        print("\n🔧 STEP 2: Creating test dataloader...")
+        print("\nSTEP 2: Creating test dataloader...")
         _, _, test_loader, _, _, test_dataset = dataloader_setup.create_dataloaders(
             train_paths, train_labels, val_paths, val_labels, test_paths, test_labels,
             config_module=cfg, run_batch_test=False
         )
         
-        print("\n🤖 STEP 3: Loading saved model...")
+        print("\n STEP 3: Loading saved model...")
         model = model_setup.create_model(len(test_dataset.classes), cfg.MODEL_NAME, cfg)
         checkpoint = torch.load(args.test_only)
         model.load_state_dict(checkpoint['model_state_dict'])
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = model.to(device)
         
-        print("\n🧪 STEP 4: Testing model...")
+        print("\n STEP 4: Testing model...")
         test_results = evaluation.comprehensive_test_evaluation(
             model, test_loader, device, test_dataset.classes,
             model_name=f"{cfg.MODEL_NAME}_loaded", config_module=cfg, use_amp=not args.no_amp
         )
         
-        print(f"\n✅ TEST COMPLETE!")
-        print(f"🎯 Test Accuracy: {test_results['test_accuracy']:.2f}%")
+        print(f"\nTEST COMPLETE!")
+        print(f"Test Accuracy: {test_results['test_accuracy']:.2f}%")
         return
     
     # =============================================================================
     # FULL TRAINING PIPELINE
     # =============================================================================
     
-    print("\n📂 STEP 1: Loading and splitting dataset...")
+    print("\n STEP 1: Loading and splitting dataset...")
     # Use the new integrated label hiding approach
     train_paths, train_labels, val_paths, val_labels, test_paths, test_labels = data_splitter.split_clean_dataset_with_config(
         pickle_path=config_paths.CLEAN_DATASET_PICKLE,
@@ -260,36 +260,36 @@ def main():
         base_data_dir=config_paths.BASE_DATA_DIR
     )
     
-    print("\n🔧 STEP 2: Creating dataloaders...")
+    print("\nSTEP 2: Creating dataloaders...")
     train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset = dataloader_setup.create_dataloaders(
         train_paths, train_labels, val_paths, val_labels, test_paths, test_labels,
         config_module=cfg, run_batch_test=False
     )
     
-    print(f"\n✅ Data preparation complete!")
-    print(f"📊 Training samples: {len(train_dataset):,}")
-    print(f"📊 Validation samples: {len(val_dataset):,}")
-    print(f"📊 Test samples: {len(test_dataset):,}")
-    print(f"🏷️ Number of classes: {len(train_dataset.classes)}")
+    print(f"\nData preparation complete!")
+    print(f"Training samples: {len(train_dataset):,}")
+    print(f"Validation samples: {len(val_dataset):,}")
+    print(f"Test samples: {len(test_dataset):,}")
+    print(f"Number of classes: {len(train_dataset.classes)}")
     
     # Check if few-shot label hiding was applied
     if hasattr(cfg, 'FEW_SHOT_MODE') and cfg.FEW_SHOT_MODE is not None:
         # Count labeled vs unlabeled samples in training set
         labeled_count = sum(1 for label in train_labels if label != -1)
         unlabeled_count = len(train_labels) - labeled_count
-        print(f"🎯 Few-shot label hiding applied:")
-        print(f"   ✅ Labeled samples: {labeled_count:,} ({labeled_count/len(train_labels)*100:.1f}%)")
-        print(f"   ❌ Unlabeled samples: {unlabeled_count:,} ({unlabeled_count/len(train_labels)*100:.1f}%)")
-        print(f"   📝 Note: Training will ignore samples with label = -1")
+        print(f"Few-shot label hiding applied:")
+        print(f"   Labeled samples: {labeled_count:,} ({labeled_count/len(train_labels)*100:.1f}%)")
+        print(f"    Unlabeled samples: {unlabeled_count:,} ({unlabeled_count/len(train_labels)*100:.1f}%)")
+        print(f"    Note: Training will ignore samples with label = -1")
     
-    print("\n⚖️  STEP 3: Calculating class weights...")
+    print("\nSTEP 3: Calculating class weights...")
     class_weights_tensor = class_weights.calculate_class_weights(train_labels, train_dataset.classes)
     
-    print("\n🤖 STEP 4: Creating model and setup training...")
+    print("\n STEP 4: Creating model and setup training...")
     model = model_setup.create_model(num_classes=len(train_dataset.classes), model_name=cfg.MODEL_NAME, config=cfg)
     model, criterion, optimizer, scheduler, device = model_setup.setup_training(model, class_weights_tensor, cfg)
     
-    print("\n🚀 STEP 5: Starting training...")
+    print("\nSTEP 5: Starting training...")
     results = training.train_model(
         model, train_loader, val_loader, criterion, optimizer, scheduler, device,
         model_name=cfg.MODEL_NAME,
@@ -300,11 +300,11 @@ def main():
         test_loader=test_loader  # Pass test_loader for dataset size logging
     )
     
-    print(f"\n🎉 Training completed!")
-    print(f"🏆 Best validation accuracy: {results['best_val_acc']:.2f}%")
-    print(f"📊 Epochs trained: {results['epochs_trained']}")
-    print(f"⏰ Training time: {results['training_time']}")
-    print(f"💾 Best model saved: {results['best_model_path']}")
+    print(f"\nTraining completed!")
+    print(f"Best validation accuracy: {results['best_val_acc']:.2f}%")
+    print(f"Epochs trained: {results['epochs_trained']}")
+    print(f" Training time: {results['training_time']}")
+    print(f" Best model saved: {results['best_model_path']}")
     
     # Test evaluation (unless skipped)
     if not args.skip_test:
@@ -313,19 +313,19 @@ def main():
             from src.utils.logger_manager import EvaluationLogger
             shared_eval_logger = EvaluationLogger(cfg.MODEL_NAME)
         except ImportError:
-            print("⚠️  Warning: logger_manager not found, proceeding without shared logger")
+            print("WARNING: logger_manager not found, proceeding without shared logger")
             shared_eval_logger = None
         
-        print(f"\n🧪 STEP 6: Evaluating on test set...")
+        print(f"\n STEP 6: Evaluating on test set...")
         test_results = evaluation.comprehensive_test_evaluation(
             model, test_loader, device, train_dataset.classes,
             model_name=cfg.MODEL_NAME, config_module=cfg, use_amp=not args.no_amp,
             eval_logger=shared_eval_logger
         )
-        print(f"🎯 Test accuracy: {test_results['test_accuracy']:.2f}%")
+        print(f"Test accuracy: {test_results['test_accuracy']:.2f}%")
         
         # Also test the saved best model (using the same logger)
-        print(f"\n🔄 Testing saved best model...")
+        print(f"\n Testing saved best model...")
         best_model = model_setup.create_model(len(train_dataset.classes), cfg.MODEL_NAME, cfg)
         checkpoint = torch.load(results['best_model_path'])
         best_model.load_state_dict(checkpoint['model_state_dict'])
@@ -334,7 +334,7 @@ def main():
         # Log separator for the second evaluation in the same log file
         if shared_eval_logger is not None:
             shared_eval_logger.logger.info("\n" + "="*60)
-            shared_eval_logger.logger.info("🔄 EVALUATING BEST SAVED MODEL")
+            shared_eval_logger.logger.info(" EVALUATING BEST SAVED MODEL")
             shared_eval_logger.logger.info("="*60)
         
         saved_test_results = evaluation.comprehensive_test_evaluation(
@@ -342,13 +342,13 @@ def main():
             model_name=f"{cfg.MODEL_NAME}_best_saved", config_module=cfg, use_amp=not args.no_amp,
             eval_logger=shared_eval_logger
         )
-        print(f"🎯 Saved best model test accuracy: {saved_test_results['test_accuracy']:.2f}%")
+        print(f"Saved best model test accuracy: {saved_test_results['test_accuracy']:.2f}%")
     
-    print(f"\n✅ ALL STEPS COMPLETED SUCCESSFULLY! 🎉")
-    print(f"📁 Check '{config.SAVE_DIR}' directory for saved models")
+    print(f"\nALL STEPS COMPLETED SUCCESSFULLY!")
+    print(f" Check '{config.SAVE_DIR}' directory for saved models")
     
     # Summary
-    print(f"\n📋 TRAINING SUMMARY:")
+    print(f"\n TRAINING SUMMARY:")
     print(f"   Model: {config.MODEL_NAME}")
     print(f"   Best Val Acc: {results['best_val_acc']:.2f}%")
     if not args.skip_test:

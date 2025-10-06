@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🥊 Compact Model Comparison - CNN vs DINOv2
+Compact Model Comparison - CNN vs DINOv2
 Self-contained script for quickly benchmarking two vision backbones.
 
 (NOTE: the original "100 lines" claim is outdated.)
@@ -30,11 +30,11 @@ try:
     from src.models.model_setup import get_model_identifier
     print(" All modules imported successfully")
 except ImportError as e:
-    print(f"❌ Import error: {e}")
+    print(f" Import error: {e}")
     print(f"Python path: {sys.path}")
     sys.exit(1)
 
-# 🔧 OPTIONAL: GPU Configuration presets (comment out if not using)
+#  OPTIONAL: GPU Configuration presets (comment out if not using)
 try:
     from gpu_configs import L40S_CONSERVATIVE, A100_OPTIMAL, A100_ULTRA, H100_OPTIMAL, H100_ULTRA, apply_gpu_learning_rate_config
     GPU_CONFIGS_AVAILABLE = True
@@ -53,14 +53,14 @@ torch.cuda.manual_seed(SEED)  # torch.cuda.manual_seed_all is deprecated
 def check_gpu_status():
     """Check and display GPU status information."""
     print("=" * 60)
-    print("🔍 GPU DETECTION AND VERIFICATION")
+    print(" GPU DETECTION AND VERIFICATION")
     print("=" * 60)
     
     cuda_available = torch.cuda.is_available()
     print(f"CUDA Available: {cuda_available}")
     
     if not cuda_available:
-        print("❌ CUDA is not available!")
+        print(" CUDA is not available!")
         print("   Training will use CPU (much slower)")
         return False, 'cpu'
     
@@ -95,7 +95,7 @@ def check_gpu_status():
 # Check GPU status
 gpu_available, device_name = check_gpu_status()
 device = torch.device(device_name)
-print(f"🚀 Using Device: {device}")
+print(f" Using Device: {device}")
 
 def apply_label_hiding_few_shot(train_paths, train_labels, mode='percentage', value=0.1, random_state=42):
     """
@@ -136,7 +136,7 @@ def apply_label_hiding_few_shot(train_paths, train_labels, mode='percentage', va
         else:
             # Validate: must have at least 1 labeled sample per class for supervised training
             if n_labeled < num_classes and n_labeled > 0:
-                raise ValueError(f"❌ FEW_SHOT_VALUE too low: {value} results in {n_labeled} labeled samples, "
+                raise ValueError(f" FEW_SHOT_VALUE too low: {value} results in {n_labeled} labeled samples, "
                                f"but need at least {num_classes} (1 per class) for training. "
                                f"Use 0.0 for zero-shot or minimum: {num_classes/total_samples:.4f}")
         
@@ -144,7 +144,7 @@ def apply_label_hiding_few_shot(train_paths, train_labels, mode='percentage', va
             # Zero-shot: no labeled samples
             labeled_indices = np.array([], dtype=int)
         else:
-            # 🔥 STRATIFIED SAMPLING: Ensure each class gets fair representation
+            #  STRATIFIED SAMPLING: Ensure each class gets fair representation
             labeled_indices = []
             samples_per_class = n_labeled // num_classes
             remaining_samples = n_labeled % num_classes
@@ -260,9 +260,9 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         # GPU-SPECIFIC SETTINGS:
     # - A100 80GB: Use PER_STEP_BATCH=256, GRADIENT_ACCUM_STEPS=1 (no accumulation needed!)
     # - L40S 24GB: Use PER_STEP_BATCH=128, GRADIENT_ACCUM_STEPS=2 (effective 256)
-    # 🚀 OPTIMIZED CONFIG: Large-scale training with 25k samples
+    #  OPTIMIZED CONFIG: Large-scale training with 25k samples
     # 
-    # 🎯 QUICK GPU SWITCHING: Uncomment the preset you want to use
+    #  QUICK GPU SWITCHING: Uncomment the preset you want to use
     # Choose ONE option below:
     
     # OPTION 1A: L40S 24GB (Safe) - ~7-8 hours
@@ -277,7 +277,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
     # OPTION 1D: H100 80GB (Optimal) - ~2-3 hours ⚡
     # GPU_CONFIG = H100_OPTIMAL if GPU_CONFIGS_AVAILABLE else None
 
-    # OPTION 1E: H100 80GB (Ultra-Fast) - ~1.5-2.5 hours 🚀
+    # OPTION 1E: H100 80GB (Ultra-Fast) - ~1.5-2.5 hours 
     # GPU_CONFIG = H100_ULTRA if GPU_CONFIGS_AVAILABLE else None
     
     if GPU_CONFIG is not None:
@@ -285,7 +285,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         GRADIENT_ACCUM_STEPS = GPU_CONFIG['gradient_accum_steps']
         EFFECTIVE_BATCH = GPU_CONFIG['effective_batch']
         NUM_WORKERS = GPU_CONFIG['num_workers']
-        print(f"🔧 Using preset: {GPU_CONFIG['name']}")
+        print(f" Using preset: {GPU_CONFIG['name']}")
         print(f" {GPU_CONFIG['description']}")
         # Auto-scale learning rate when the preset declares it
         if GPU_CONFIG.get('auto_scale_lr', False):
@@ -294,9 +294,9 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             if lr_multiplier is not None:
                 active_config.LEARNING_RATE = base_lr * float(lr_multiplier)
                 try:
-                    print(f"⚙️  Auto LR scaling: {base_lr:.6g} × {float(lr_multiplier):.3g} -> {active_config.LEARNING_RATE:.6g}")
+                    print(f"  Auto LR scaling: {base_lr:.6g} × {float(lr_multiplier):.3g} -> {active_config.LEARNING_RATE:.6g}")
                 except Exception:
-                    print(f"⚙️  Auto LR scaling applied. New LR = {active_config.LEARNING_RATE}")
+                    print(f"  Auto LR scaling applied. New LR = {active_config.LEARNING_RATE}")
             else:
                 # Fallback to batch-size-based scaling via helper if available
                 try:
@@ -307,16 +307,16 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
                         EFFECTIVE_BATCH,
                         'linear'
                     )
-                    print(f"⚙️  Auto LR scaling (by batch): {base_lr:.6g} -> {active_config.LEARNING_RATE:.6g}")
+                    print(f"  Auto LR scaling (by batch): {base_lr:.6g} -> {active_config.LEARNING_RATE:.6g}")
                 except Exception:
-                    print("⚠️  Could not auto-scale LR; using base learning rate.")
+                    print("  Could not auto-scale LR; using base learning rate.")
     else:
         # Fallback: Manual configuration
         PER_STEP_BATCH = 128      # Physical batch per step (safe for L40S 24GB)
         GRADIENT_ACCUM_STEPS = 2  # Accumulate 2 steps (effective batch 256)
         EFFECTIVE_BATCH = 256     # Effective batch = 128 × 2 = 256
         NUM_WORKERS = 8           # Optimal for most systems
-        print("ℹ️  Using manual GPU configuration")
+        print("  Using manual GPU configuration")
     
     # Force override parameters - ensure these take precedence
     active_config.NUM_WORKERS = NUM_WORKERS
@@ -327,7 +327,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
     # DON'T override EPOCHS here - let regime-specific function handle it
     
     # Debug: Verify all overrides
-    print(f"🔧 Config overrides:")
+    print(f" Config overrides:")
     print(f"   EPOCHS = {active_config.EPOCHS}")
     print(f"   PER-STEP BATCH = {active_config.BATCH_SIZE}")
     print(f"   GRADIENT ACCUM STEPS = {active_config.GRADIENT_ACCUM_STEPS}")
@@ -337,7 +337,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
     # Flip to True if you want to re-run the expensive corruption checks.
     setattr(active_config, 'VALIDATE_IMAGES', False)
     
-    # 🔧 OVERRIDE CONFIG FEW-SHOT SETTINGS (prevent other modules from activating few-shot)
+    #  OVERRIDE CONFIG FEW-SHOT SETTINGS (prevent other modules from activating few-shot)
     if few_shot_mode is None:
         # Ensure few-shot is completely disabled in config
         setattr(active_config, 'FEW_SHOT_MODE', None)
@@ -389,7 +389,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             base_data_dir=config_paths.BASE_DATA_DIR
         )
         
-        # 📊 LIMIT DATASET SIZE FIRST (before validation!)
+        #  LIMIT DATASET SIZE FIRST (before validation!)
         original_train_size = len(train_paths)
         original_val_size = len(val_paths)
         original_test_size = len(test_paths)
@@ -438,7 +438,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
                 comparison_logger.log_dataset_processing(model_type, original_sizes, final_sizes)
             
             # Debug output
-            print(f"   📊 Dataset size limiting:")
+            print(f"    Dataset size limiting:")
             print(f"      Original: {original_train_size:,} train, {original_val_size:,} val, {original_test_size:,} test")
             print(f"      Target sample size: {sample_size:,}")
             print(f"      Final: {train_size:,} train, {val_size:,} val, {test_size:,} test")
@@ -446,10 +446,10 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             
             # Safety check
             if test_size == 0:
-                raise ValueError(f"❌ Test size became 0! This is a critical bug. "
+                raise ValueError(f" Test size became 0! This is a critical bug. "
                                f"Sample size: {sample_size}, Train: {train_size}, Val: {val_size}")
             
-            # 🔧 FIX: Stratified sampling to ensure ALL classes are represented
+            #  FIX: Stratified sampling to ensure ALL classes are represented
             # (prevents KeyError when small samples miss some classes)
             
             def stratified_sample(paths, labels, target_size, random_state=42):
@@ -495,29 +495,29 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             val_paths, val_labels = stratified_sample(val_paths, val_labels, val_size)
             test_paths, test_labels = stratified_sample(test_paths, test_labels, test_size)
             
-            print(f"   ✅ Pre-sampled {len(train_paths) + len(val_paths) + len(test_paths):,} paths before validation")
+            print(f"    Pre-sampled {len(train_paths) + len(val_paths) + len(test_paths):,} paths before validation")
         else:
             # Using full dataset
-            print(f"   📊 FULL DATASET MODE:")
+            print(f"    FULL DATASET MODE:")
             print(f"      Train: {original_train_size:,} samples")
             print(f"      Val: {original_val_size:,} samples")
             print(f"      Test: {original_test_size:,} samples")
             print(f"      Total: {total_original:,} samples")
-            print(f"   ✅ Using complete dataset for research-quality training")
+            print(f"    Using complete dataset for research-quality training")
         
-        # 🎯 TRUE FEW-SHOT: Hide labels instead of reducing dataset size
+        #  TRUE FEW-SHOT: Hide labels instead of reducing dataset size
         labeled_samples_count = len(train_paths)
         few_shot_info = None  # Default when few-shot disabled
         
-        print(f"🔧 Few-shot check: mode={few_shot_mode}, value={few_shot_value}")
+        print(f" Few-shot check: mode={few_shot_mode}, value={few_shot_value}")
         if few_shot_mode is not None:
-            print(f"🎯 COMPACT SCRIPT: Applying few-shot label hiding...")
+            print(f" COMPACT SCRIPT: Applying few-shot label hiding...")
             train_paths, train_labels, labeled_mask = apply_label_hiding_few_shot(
                 train_paths, train_labels, few_shot_mode, few_shot_value, 
                 active_config.RANDOM_STATE if hasattr(active_config, 'RANDOM_STATE') else 42
             )
             labeled_samples_count = sum(labeled_mask)
-            print(f"🎯 COMPACT SCRIPT: Label Hiding Applied: {labeled_samples_count}/{len(train_paths)} samples have labels")
+            print(f" COMPACT SCRIPT: Label Hiding Applied: {labeled_samples_count}/{len(train_paths)} samples have labels")
             few_shot_info = {
                 'mode': few_shot_mode,
                 'value': few_shot_value,
@@ -525,7 +525,7 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
                 'total_count': len(train_paths)
             }
         else:
-            print(f"🎯 COMPACT SCRIPT: Few-shot DISABLED - All {len(train_paths)} samples have labels")
+            print(f" COMPACT SCRIPT: Few-shot DISABLED - All {len(train_paths)} samples have labels")
             # We still capture basic info for consistency
             few_shot_info = {
                 'mode': None,
@@ -555,9 +555,9 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             
         model = model_setup.create_model(num_classes, original_name, active_config).to(device)
         
-        print(f"🎯 Classes: {num_classes}, Parameters: {sum(p.numel() for p in model.parameters()):,}")
+        print(f" Classes: {num_classes}, Parameters: {sum(p.numel() for p in model.parameters()):,}")
         if experiment_context:
-            print(f"💾 Model checkpoints will be saved with identifier: {current_model_name}")
+            print(f" Model checkpoints will be saved with identifier: {current_model_name}")
         
         # Create optimizer and scheduler (ViT-friendly: AdamW + warmup + cosine)
         # Build ViT param groups with proper weight-decay exclusions
@@ -586,14 +586,14 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         optimizer = model_setup.create_optimizer(param_groups if param_groups is not None else model.parameters(), config=active_config)
         scheduler = model_setup.create_scheduler(optimizer, config=active_config)
         
-        # 🎯 CREATE FEW-SHOT AWARE LOSS FUNCTION
+        #  CREATE FEW-SHOT AWARE LOSS FUNCTION
         base_criterion = torch.nn.CrossEntropyLoss()
         if few_shot_mode is not None:
             criterion = create_few_shot_loss_function(base_criterion, ignore_index=-1)
-            print(f"🎯 Using few-shot loss function (ignores -1 labels)")
+            print(f" Using few-shot loss function (ignores -1 labels)")
         else:
             criterion = base_criterion
-            print(f"🎯 Using standard loss function")
+            print(f" Using standard loss function")
         
         # Train model (using updated model name with experiment context)
         train_result = training.train_model(
@@ -711,19 +711,19 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
     # Get the original model name from config
     original_model_name = active_config.MODEL_NAME
     
-    # ✅ Set regime and label budget on config; DO NOT override MODEL_NAME
+    #  Set regime and label budget on config; DO NOT override MODEL_NAME
     # Let get_model_identifier() derive consistent IDs across the codebase
     if experiment_context:
         label_desc = experiment_context['label_description']
         seed_str = f"_s{experiment_context['random_seed']}" if experiment_context['random_seed'] != 42 else ""
-        print(f"📝 Experiment context: {training_regime} | {label_desc}{seed_str}")
+        print(f" Experiment context: {training_regime} | {label_desc}{seed_str}")
     # Ensure training regime is available to identifier and logs
     active_config.TRAINING_REGIME = training_regime
     # Keep using original model name; identifier will include regime and labels
     model_name = original_model_name
     
-    # 🔥 FAIR COMPETITION: Research-quality hyperparameters optimized for each strategy
-    # 📈 GPU-SPECIFIC LEARNING RATE CONFIGURATION: Dynamic scaling based on GPU capabilities
+    #  FAIR COMPETITION: Research-quality hyperparameters optimized for each strategy
+    #  GPU-SPECIFIC LEARNING RATE CONFIGURATION: Dynamic scaling based on GPU capabilities
     
     # Get the current GPU configuration (passed from run_model function)
     current_gpu_config = gpu_config
@@ -751,12 +751,12 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
             active_config.WARMUP_EPOCHS = 2
             active_config.WARMUP_START_LR = 1e-5
             
-        print(f"🧊 Linear probe: frozen backbone, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
+        print(f" Linear probe: frozen backbone, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
         
     elif training_regime == 'fine_tune':
         # Fine-tuning: progressive unfreezing (only for DiNO, but keeping general)
         active_config.FREEZE_BACKBONE = True
-        active_config.UNFREEZE_AFTER_EPOCH = int(3)   # ✅ Early unfreeze
+        active_config.UNFREEZE_AFTER_EPOCH = int(3)   #  Early unfreeze
         active_config.EPOCHS = int(3)  # Fine-tuning: needs more epochs (was 8 for testing) 25
         active_config.WEIGHT_DECAY = float(0.01)
         active_config.DROPOUT = float(0.1)  # Lower dropout for fine-tuning
@@ -771,7 +771,7 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
             active_config.WARMUP_EPOCHS = 2
             active_config.WARMUP_START_LR = 1e-5
             
-        print(f"🔥 Fine-tune: progressive unfreeze @ epoch {active_config.UNFREEZE_AFTER_EPOCH}, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
+        print(f" Fine-tune: progressive unfreeze @ epoch {active_config.UNFREEZE_AFTER_EPOCH}, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
         
     else:  # supervised
         # Supervised: full training from scratch
@@ -798,9 +798,9 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
             active_config.WARMUP_EPOCHS = 3
             active_config.WARMUP_START_LR = 1e-6
             
-        print(f"🚀 Supervised: full training, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
+        print(f" Supervised: full training, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
     
-    # 🎯 TRAINING STRATEGY OPTIMIZATIONS
+    #  TRAINING STRATEGY OPTIMIZATIONS
     
     # Learning rate scheduling (regime-appropriate)
     if training_regime == 'linear_probe':
@@ -960,7 +960,7 @@ def print_experiment_console_summary(all_results, start_time, end_time, output_f
     summary_lines.append("="*80)
     summary_lines.append( "EXPERIMENT SUMMARY")
     summary_lines.append("="*80)
-    summary_lines.append(f"⏱️ Total experiment time: {total_time:.1f} seconds ({total_time/60:.1f} minutes)")
+    summary_lines.append(f" Total experiment time: {total_time:.1f} seconds ({total_time/60:.1f} minutes)")
     summary_lines.append("")
 
     # Find best model by test accuracy
@@ -992,7 +992,7 @@ def print_experiment_console_summary(all_results, start_time, end_time, output_f
         if best.get('matthews_corrcoef') is not None:
             summary_lines.append(f"   Matthews Corr. Coef: {best.get('matthews_corrcoef', 0):.3f}")
     else:
-        summary_lines.append("❌ No successful models to report best from.")
+        summary_lines.append(" No successful models to report best from.")
     
     summary_lines.append("")
     summary_lines.append(" DETAILED EXPERIMENT RESULTS:")
@@ -1129,22 +1129,22 @@ def print_experiment_console_summary(all_results, start_time, end_time, output_f
             f.write(summary_text)
         print(f"\n Experiment summary saved to: {output_file}")
     except Exception as e:
-        print(f"⚠️ Could not save experiment summary to file: {e}")
+        print(f" Could not save experiment summary to file: {e}")
     
     return output_file
 
 def main():
     """Main comparison function with MULTIPLE SEEDS and TRAINING REGIMES"""
-    print("🚀 QUICK TEST MODE: 1000 samples, reduced epochs (~1-2 hours)")
-    print("🔧 For full experiment: change SAMPLE_SIZE=10000, EPOCHS back to (15,25,25)")
+    print(" QUICK TEST MODE: 1000 samples, reduced epochs (~1-2 hours)")
+    print(" For full experiment: change SAMPLE_SIZE=10000, EPOCHS back to (15,25,25)")
     
-    # ⏱️ Track experiment time
+    # Track experiment time
     start_time = time.time()
     
     # Initialize comparison logger
     comparison_logger = ComparisonLogger()
     
-    # 📊 AUTO-DETECT DATASET SIZE
+    #  AUTO-DETECT DATASET SIZE
     temp_train, temp_labels, temp_val, temp_val_labels, temp_test, temp_test_labels = data_splitter.split_clean_dataset(
         pickle_path=config_paths.CLEAN_DATASET_PICKLE,
         base_data_dir=config_paths.BASE_DATA_DIR,
@@ -1153,13 +1153,13 @@ def main():
     )
     total_dataset_size = len(temp_train) + len(temp_val) + len(temp_test)
     
-    # 📊 DATASET SIZE Configuration:
+    #  DATASET SIZE Configuration:
     # SAMPLE_SIZE = 10000                            # Full experiment (12-15 hours with old batch 64)
-    # SAMPLE_SIZE = 4000                             # ✅ OPTIMIZED: ~6-7 hours with batch 256 + grad accum
+    # SAMPLE_SIZE = 4000                             #  OPTIMIZED: ~6-7 hours with batch 256 + grad accum
     # SAMPLE_SIZE = 1000                             # Quick test (~1.5 hours)
     SAMPLE_SIZE = 500                             # Balanced: good results in <8 hours
     
-    # 🎯 CRITICAL: Label efficiency analysis - how much labeled data is needed?
+    #  CRITICAL: Label efficiency analysis - how much labeled data is needed?
     LABEL_BUDGETS = [
         # ('percentage', 0.05),  # 5% of labels visible (very low-label)
         ('percentage', 0.1),   # 10% of labels visible (few-shot learning)
@@ -1167,10 +1167,10 @@ def main():
         ('percentage', 1.0)    # 100% of labels visible (full supervision)
     ]
     
-    # 🎯 Single seed for faster experimentation (can expand to 3+ seeds later for publication)
+    #  Single seed for faster experimentation (can expand to 3+ seeds later for publication)
     RANDOM_SEEDS = [42]  # Single seed for manageable runtime
     
-    # 🎯 CRITICAL: Different training regimes for fair comparison
+    #  CRITICAL: Different training regimes for fair comparison
     TRAINING_REGIMES = {
         'cnn': ['supervised'],  # CNN always supervised
         'dinov2': ['linear_probe', 'fine_tune'],  # DINOv2: frozen vs fine-tuned
@@ -1181,7 +1181,7 @@ def main():
     print(f" Label budgets: {len(LABEL_BUDGETS)} budgets × {len(RANDOM_SEEDS)} seeds × models")
     print(f" Training regimes: {TRAINING_REGIMES}")
     
-    # 🤖 MODEL SELECTION 
+    #  MODEL SELECTION 
     model_types = [
         ('cnn', config.MODEL_NAME),
         ('dinov2', config_dinov2.MODEL_NAME),
@@ -1201,7 +1201,7 @@ def main():
     
     all_results = []
     
-    # 🚀 RUN COMPREHENSIVE EXPERIMENTS
+    #  RUN COMPREHENSIVE EXPERIMENTS
     total_experiments = len(LABEL_BUDGETS) * len(RANDOM_SEEDS) * sum(len(regimes) for regimes in TRAINING_REGIMES.values())
     experiment_count = 0
     
@@ -1228,7 +1228,7 @@ def main():
                 for regime in regimes:
                     experiment_count += 1
                     
-                    # 🔥 ENHANCED EXPERIMENT IDENTIFICATION
+                    #  ENHANCED EXPERIMENT IDENTIFICATION
                     label_desc = f"{int(budget_value*100)}%" if budget_mode == 'percentage' else f"{budget_value}/class"
                     experiment_title = f"{model_type.upper()}-{regime.upper()}, {label_desc} labels"
                     
@@ -1283,16 +1283,16 @@ def main():
                     
                     all_results.append(result)
                     
-                    # 📊 EXPERIMENT COMPLETION SUMMARY
+                    #  EXPERIMENT COMPLETION SUMMARY
                     if result.get('success', False):
                         test_acc = result.get('test_accuracy', 0)
                         train_acc = result.get('train_accuracy', 0)
                         model_path = result.get('best_model_path', 'No path available')
                         print(f"    COMPLETED: Train={train_acc:.1f}%, Test={test_acc:.1f}%")
                         if model_path and model_path != 'No path available':
-                            print(f"   💾 Model saved: {model_path}")
+                            print(f"    Model saved: {model_path}")
                         else:
-                            print(f"   💾 Model saved as: {result.get('model_name', 'unknown')}")
+                            print(f"    Model saved as: {result.get('model_name', 'unknown')}")
                     else:
                         print(f"    FAILED: {result.get('error', 'Unknown error')}")
                     
@@ -1304,7 +1304,7 @@ def main():
                         comparison_logger.log_gpu_cleanup()
                         torch.cuda.empty_cache()
     
-    # 📊 AGGREGATE RESULTS: Compute mean ± std per (budget, regime, model)
+    #  AGGREGATE RESULTS: Compute mean ± std per (budget, regime, model)
     aggregated_results = aggregate_results_by_condition(all_results)
     
     # Log and save results
@@ -1326,9 +1326,9 @@ def main():
             json.dump(json_compatible, f, indent=2)
         print(f" Aggregated results saved to: {aggregated_file}")
     except Exception as e:
-        print(f"⚠️ Could not save aggregated results: {e}")
+        print(f" Could not save aggregated results: {e}")
     
-    # 🎉 FINAL EXPERIMENT SUMMARY
+    #  FINAL EXPERIMENT SUMMARY
     print(f"\n" + "="*80)
     print(f" COMPREHENSIVE EXPERIMENT COMPLETED!")
     print(f" Total experiments run: {len(all_results)}")
@@ -1337,8 +1337,8 @@ def main():
     print(f" Results saved to: {results_file}")
     print(f" Aggregated results: {aggregated_file}")
     
-    # 💾 SAVED MODELS SUMMARY
-    print(f"\n💾 SAVED MODELS SUMMARY:")
+    #  SAVED MODELS SUMMARY
+    print(f"\n SAVED MODELS SUMMARY:")
     print("-" * 80)
     successful_results = [r for r in all_results if r.get('success', False)]
     if successful_results:
@@ -1349,7 +1349,7 @@ def main():
             model_path = result.get('best_model_path', 'No path')
             
             print(f" {experiment_title}: {test_acc:.1f}%")
-            print(f"   🔧 Model ID: {model_name}")
+            print(f"    Model ID: {model_name}")
             if model_path and model_path != 'No path':
                 print(f"    Path: {model_path}")
             print()

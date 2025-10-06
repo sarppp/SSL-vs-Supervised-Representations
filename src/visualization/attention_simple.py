@@ -39,13 +39,13 @@ class ImprovedAttentionVisualizer:
         self.models = {}  # Will store loaded models
         self.model_info = {}
         self.temperature = temperature  # For softmax smoothing
-        print(f"🚀 Using device: {self.device}")
+        print(f"Using device: {self.device}")
         
         # Disable xFormers for CPU inference to avoid compatibility issues
         if self.device.type == 'cpu':
             import os
             os.environ['XFORMERS_DISABLED'] = '1'
-            print("⚠️ Disabled xFormers for CPU inference")
+            print("WARNING: Disabled xFormers for CPU inference")
         
     def find_models(self):
         """Auto-detect available original models only."""
@@ -66,7 +66,7 @@ class ImprovedAttentionVisualizer:
                     # Use the best one (highest accuracy if multiple)
                     best_model = max(matches, key=lambda x: self._extract_accuracy(x.name))
                     found_models[key] = str(best_model)
-                    print(f"✅ Found {key}: {best_model.name}")
+                    print(f"Found {key}: {best_model.name}")
         
         return found_models
     
@@ -112,7 +112,7 @@ class ImprovedAttentionVisualizer:
         
         # For DINOv2 models on CPU, we need to handle xFormers compatibility
         if 'dinov2' in model_name.lower() and self.device.type == 'cpu':
-            print("⚠️ DINOv2 on CPU - ensuring compatibility...")
+            print("WARNING: DINOv2 on CPU - ensuring compatibility...")
             # Force the model to use regular attention instead of xFormers
             if hasattr(model, 'backbone') and hasattr(model.backbone, 'blocks'):
                 for block in model.backbone.blocks:
@@ -144,18 +144,18 @@ class ImprovedAttentionVisualizer:
         """Load all available original models."""
         found_models = self.find_models()
         
-        print(f"\n🔍 Loading models for visualization...")
+        print(f"\nLoading models for visualization...")
         
         for key, path in found_models.items():
             try:
                 model, info = self._load_model(path)
                 self.models[key] = model
                 self.model_info[key] = info
-                print(f"✅ Loaded {key}: {info['model_name']}")
+                print(f"Loaded {key}: {info['model_name']}")
             except Exception as e:
-                print(f"❌ Failed to load {key}: {e}")
+                print(f" Failed to load {key}: {e}")
         
-        print(f"\n📊 Successfully loaded {len(self.models)} models")
+        print(f"\nSuccessfully loaded {len(self.models)} models")
         return len(self.models) > 0
     
     def get_improved_transformer_attention(self, model, image_tensor, model_info, target_layer=6):
@@ -205,7 +205,7 @@ class ImprovedAttentionVisualizer:
                     _ = model(image_tensor)
                 except Exception as e:
                     if "memory_efficient_attention" in str(e) or "xformers" in str(e).lower():
-                        print(f"⚠️ xFormers issue in attention hook, skipping transformer attention")
+                        print(f"WARNING: xFormers issue in attention hook, skipping transformer attention")
                         return None
                     else:
                         raise e
@@ -239,7 +239,7 @@ class ImprovedAttentionVisualizer:
                     
                     return attention_np
         except Exception as e:
-            print(f"⚠️ Improved transformer attention failed: {e}")
+            print(f"WARNING: Improved transformer attention failed: {e}")
         
         # Fallback: Gradient-based attention
         return self.get_improved_gradient_attention(model, image_tensor, model_info)
@@ -259,7 +259,7 @@ class ImprovedAttentionVisualizer:
                 output = model(image_tensor_grad)
             except Exception as e:
                 if "memory_efficient_attention" in str(e) or "xformers" in str(e).lower():
-                    print(f"⚠️ xFormers issue in gradient attention, moving to CPU")
+                    print(f"WARNING: xFormers issue in gradient attention, moving to CPU")
                     model = model.cpu()
                     image_tensor_grad = image_tensor_grad.cpu()
                     output = model(image_tensor_grad)
@@ -302,7 +302,7 @@ class ImprovedAttentionVisualizer:
             return attention_np
             
         except Exception as e:
-            print(f"⚠️ Improved gradient attention failed: {e}")
+            print(f"WARNING: Improved gradient attention failed: {e}")
             return None
     
     def create_improved_overlay(self, original_image, attention_map, alpha=0.6):
@@ -360,7 +360,7 @@ class ImprovedAttentionVisualizer:
                 confidence = probabilities[predicted_class_idx]
         except Exception as e:
             if "memory_efficient_attention" in str(e) or "xformers" in str(e).lower():
-                print(f"⚠️ xFormers issue detected, trying CPU fallback for {model_key}")
+                print(f"WARNING: xFormers issue detected, trying CPU fallback for {model_key}")
                 # Move everything to CPU and try again
                 model = model.cpu()
                 image_tensor = image_tensor.cpu()
@@ -409,7 +409,7 @@ class ImprovedAttentionVisualizer:
     def create_simple_visualization(self, image_paths, save_path=None, overlay_mode='overlay'):
         """Create simple but effective attention visualization without quantized comparison."""
         if not self.models:
-            print("❌ No models loaded!")
+            print(" No models loaded!")
             return
         
         n_images = len(image_paths)
@@ -442,7 +442,7 @@ class ImprovedAttentionVisualizer:
                 
                 if result:
                     # Model info
-                    model_type = "🤖 DINOv2" if result['is_transformer'] else "🖼️ EfficientNet"
+                    model_type = "DINOv2" if result['is_transformer'] else "EfficientNet"
                     
                     # Show attention overlay
                     if result['has_attention'] and result['overlay'] is not None:
@@ -451,7 +451,7 @@ class ImprovedAttentionVisualizer:
                         title_color = 'darkgreen' if result['confidence'] > 0.9 else 'darkblue'
                     else:
                         axes[i, col_idx].imshow(result['original_image'])
-                        title_text = f"{model_type}\n⚠️ No Attention"
+                        title_text = f"{model_type}\nNo Attention"
                         title_color = 'darkred'
                     
                     axes[i, col_idx].set_title(f'Attention Overlay\n{title_text}', fontsize=9, fontweight='bold', color=title_color)
@@ -469,14 +469,14 @@ class ImprovedAttentionVisualizer:
                     axes[i, col_idx + 1].axis('off')
                     
                     # Print analysis info
-                    print(f"🔍 {Path(image_path).name} - {model_key}: {result['predicted_class']} ({result['confidence']:.3f})")
+                    print(f"{Path(image_path).name} - {model_key}: {result['predicted_class']} ({result['confidence']:.3f})")
                 
                 else:
                     # Error handling
                     for j in range(2):  # Overlay and heatmap columns
                         axes[i, col_idx + j].text(0.5, 0.5, f'Model {model_key}\nFailed to Load', 
                                                 ha='center', va='center', transform=axes[i, col_idx + j].transAxes)
-                        axes[i, col_idx + j].set_title(f'{model_key}\n❌ Error', fontsize=10, color='red')
+                        axes[i, col_idx + j].set_title(f'{model_key}\n Error', fontsize=10, color='red')
                         axes[i, col_idx + j].axis('off')
                 
                 col_idx += 2  # Move to next model (overlay + heatmap)
@@ -485,7 +485,7 @@ class ImprovedAttentionVisualizer:
         
         if save_path:
             plt.savefig(save_path, dpi=200, bbox_inches='tight')
-            print(f"💾 Simple attention visualization saved: {save_path}")
+            print(f" Simple attention visualization saved: {save_path}")
 
         # ------------------------------
         # Export attention maps for further analysis
@@ -508,7 +508,7 @@ class ImprovedAttentionVisualizer:
             self.create_model_specific_visualization(image_paths, model_key, variant_path, overlay_mode)
         
         # Print summary
-        print(f"\n📊 ATTENTION VISUALIZATION SUMMARY")
+        print(f"\nATTENTION VISUALIZATION SUMMARY")
         print(f"{'='*50}")
         for key in available_models:
             info = self.model_info[key]
@@ -536,7 +536,7 @@ class ImprovedAttentionVisualizer:
     def create_model_specific_visualization(self, image_paths, model_key, save_path=None, overlay_mode='overlay'):
         """Generate visualization for one model only (Original, Overlay, Heatmap)."""
         if model_key not in self.models:
-            print(f"⚠️ Model {model_key} not loaded; skipping model-specific visualization.")
+            print(f"WARNING: Model {model_key} not loaded; skipping model-specific visualization.")
             return
         n_images = len(image_paths)
         fig, axes = plt.subplots(n_images, 3, figsize=(12, 4*n_images))
@@ -568,7 +568,7 @@ class ImprovedAttentionVisualizer:
         plt.tight_layout()
         if save_path:
             plt.savefig(save_path, dpi=200, bbox_inches='tight')
-            print(f"💾 Model-specific visualization saved: {save_path}")
+            print(f" Model-specific visualization saved: {save_path}")
         plt.show()
 
     def _find_last_conv(self, model):
@@ -584,7 +584,7 @@ class ImprovedAttentionVisualizer:
         """Compute Grad-CAM for CNN models to obtain spatial attention."""
         target_layer = self._find_last_conv(model)
         if target_layer is None:
-            print("⚠️ No Conv2d layer found for Grad-CAM; falling back to gradient magnitude.")
+            print("WARNING: No Conv2d layer found for Grad-CAM; falling back to gradient magnitude.")
             return None
         activations = {}
         gradients = {}
@@ -613,7 +613,7 @@ class ImprovedAttentionVisualizer:
         
         fh.remove(); bh.remove()
         if 'value' not in activations or 'value' not in gradients:
-            print("⚠️ Grad-CAM hooks failed; returning None")
+            print("WARNING: Grad-CAM hooks failed; returning None")
             return None
         act = activations['value']  # [B, C, H, W]
         grad = gradients['value']   # same shape
@@ -644,7 +644,7 @@ def get_diverse_test_images(base_dir='crop_pest_data', n_images=3):
     
     image_dir = Path(base_dir)
     if not image_dir.exists():
-        print(f"⚠️ Directory not found: {base_dir}")
+        print(f"WARNING: Directory not found: {base_dir}")
         return []
     
     # Try to get images from different disease categories
@@ -688,16 +688,16 @@ def main():
     
     # Load all available original models (no quantized)
     if not visualizer.load_all_models():
-        print("❌ No models could be loaded!")
+        print(" No models could be loaded!")
         return
     
     # Get diverse test images
     image_paths = get_diverse_test_images(n_images=3)
     if not image_paths:
-        print("❌ No test images found!")
+        print(" No test images found!")
         return
     
-    print(f"\n🖼️ Using test images:")
+    print(f"\nUsing test images:")
     for i, path in enumerate(image_paths, 1):
         print(f"  {i}. {Path(path).name} ({Path(path).parent.name})")
     
@@ -706,10 +706,10 @@ def main():
     save_dir.mkdir(exist_ok=True, parents=True)
     save_path = str(save_dir / "simple_attention_visualization.png")
     
-    print(f"\n🎯 Creating improved attention visualization...")
+    print(f"\nCreating improved attention visualization...")
     visualizer.create_simple_visualization(image_paths, save_path)
     
-    print(f"\n✅ Enhanced attention visualization complete!")
+    print(f"\nEnhanced attention visualization complete!")
     print(f"📁 Results saved to: {save_dir}")
 
 if __name__ == "__main__":

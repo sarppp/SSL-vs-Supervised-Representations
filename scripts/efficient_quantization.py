@@ -444,14 +444,14 @@ class ResearchQuantizer:
             f.write("=" * 90 + "\n\n")
             
             # Dataset information
-            f.write("📊 DATASET SUMMARY\n")
+            f.write("DATASET SUMMARY\n")
             f.write("-" * 50 + "\n")
             f.write(f"Total samples evaluated: {total_samples:,}\n")
             f.write(f"Number of classes: {num_classes}\n")
             f.write(f"Evaluation batches: {cnn_quant_metrics['evaluation_batches']}\n\n")
             
             # Detailed performance table
-            f.write("📈 DETAILED PERFORMANCE ANALYSIS\n")
+            f.write("DETAILED PERFORMANCE ANALYSIS\n")
             f.write("-" * 100 + "\n")
             f.write(f"{'Model':<25} | {'Accuracy':>8} | {'Speed (ms)':>11} | {'±StdDev':>8} | {'Memory (MB)':>11} | {'Throughput':>10} | {'Drone Score':>11}\n")
             f.write("-" * 100 + "\n")
@@ -462,7 +462,7 @@ class ResearchQuantizer:
             f.write("\n")
             
             # Research insights
-            f.write("🔍 QUANTIZATION RESEARCH INSIGHTS\n")
+            f.write("QUANTIZATION RESEARCH INSIGHTS\n")
             f.write("-" * 50 + "\n")
             f.write("CNN Results:\n")
             f.write(f"  • Accuracy Retention: {cnn_research_metrics['accuracy_retention_percent']:.1f}%\n")
@@ -490,9 +490,9 @@ class ResearchQuantizer:
             
             best_model = max(models_comparison, key=lambda x: x[1])
             
-            f.write("🎯 RESEARCH CONCLUSIONS & RECOMMENDATIONS\n")
+            f.write("RESEARCH CONCLUSIONS & RECOMMENDATIONS\n")
             f.write("-" * 50 + "\n")
-            f.write(f"🏆 OPTIMAL MODEL FOR AGRICULTURAL DRONE DEPLOYMENT: {best_model[0]}\n")
+            f.write(f"OPTIMAL MODEL FOR AGRICULTURAL DRONE DEPLOYMENT: {best_model[0]}\n")
             f.write(f"   Research Drone Score: {best_model[1]:.1f}/100\n")
             f.write(f"   Accuracy: {best_model[2]['accuracy']:.1%}\n")
             f.write(f"   Inference Speed: {best_model[2]['inference_time_ms_mean']:.2f}±{best_model[2]['inference_time_ms_std']:.2f}ms\n")
@@ -502,7 +502,7 @@ class ResearchQuantizer:
             
             # Timing summary
             total_time = cnn_quant_time + dino_quant_time
-            f.write("⏱️  RESEARCH TIMING SUMMARY\n")
+            f.write("RESEARCH TIMING SUMMARY\n")
             f.write("-" * 50 + "\n")
             f.write(f"   • CNN quantization: {cnn_quant_time:.2f}s\n")
             f.write(f"   • DINOv2 quantization: {dino_quant_time:.2f}s\n")
@@ -510,7 +510,7 @@ class ResearchQuantizer:
             f.write(f"   • Evaluation thoroughness: Comprehensive (full test set)\n\n")
             
             # Per-class accuracy details (sample)
-            f.write("📊 PER-CLASS ACCURACY ANALYSIS\n")
+            f.write("PER-CLASS ACCURACY ANALYSIS\n")
             f.write("-" * 50 + "\n")
             f.write("CNN Quantized per-class accuracy:\n")
             for class_id, acc in list(cnn_quant_metrics['class_accuracies'].items())[:10]:  # Show first 10
@@ -525,7 +525,7 @@ class ResearchQuantizer:
                 f.write(f"  ... and {len(dino_quant_metrics['class_accuracies']) - 10} more classes\n")
             
             f.write("\n" + "=" * 90 + "\n")
-            f.write("📝 RESEARCH NOTES:\n")
+            f.write(" RESEARCH NOTES:\n")
             f.write("   • Models saved with comprehensive metadata for paper writing\n")
             f.write("   • Per-class accuracy metrics included for detailed analysis\n")
             f.write("   • Statistical measures (mean, std) provided for reproducibility\n")
@@ -709,9 +709,9 @@ def main():
     
     # Comprehensive Research Results
     print("\n" + "=" * 90)
-    print("📊 COMPREHENSIVE RESEARCH RESULTS (FAIR CPU COMPARISON)")
+    print("COMPREHENSIVE RESEARCH RESULTS (FAIR CPU COMPARISON)")
     print("=" * 90)
-    print("⚠️  NOTE: All models evaluated on CPU for fair comparison")
+    print("WARNING: All models evaluated on CPU for fair comparison")
     print("   (Quantized models currently require CPU; comparing GPU vs CPU would be misleading)")
     
     # Detailed comparison table
@@ -724,7 +724,7 @@ def main():
     print(f"{'DINOv2 Quantized':<25} | {dino_quant_metrics['accuracy']:7.1%} | {dino_quant_metrics['inference_time_ms_mean']:10.2f} | {dino_quant_metrics['inference_time_ms_std']:7.2f} | {dino_quant_metrics['memory_usage_mb']:10.1f} | {dino_quant_metrics['throughput_imgs_per_sec']:9.1f} | {dino_research_metrics['drone_deployment_score']:10.1f}")
     
     # Research insights
-    print(f"\n📈 QUANTIZATION RESEARCH INSIGHTS")
+    print(f"\nQUANTIZATION RESEARCH INSIGHTS")
     print(f"CNN Results:")
     print(f"  • Accuracy Retention: {cnn_research_metrics['accuracy_retention_percent']:.1f}%")
     print(f"  • Size Reduction: {cnn_research_metrics['size_reduction_factor']:.1f}x ({cnn_original_size['size_mb']:.1f}MB → {cnn_quant_size['size_mb']:.1f}MB)")
@@ -742,7 +742,7 @@ def main():
     print(f"  • Overall Efficiency Score: {dino_research_metrics['efficiency_score']:.1f}")
     
     # Research recommendations
-    print(f"\n🎯 RESEARCH CONCLUSIONS & RECOMMENDATIONS")
+    print(f"\nRESEARCH CONCLUSIONS & RECOMMENDATIONS")
     
     # Determine best model based on research metrics
     models_comparison = [
@@ -754,7 +754,7 @@ def main():
     
     best_model = max(models_comparison, key=lambda x: x[1])
     
-    print(f"\n🏆 OPTIMAL MODEL FOR AGRICULTURAL DRONE DEPLOYMENT: {best_model[0]}")
+    print(f"\nOPTIMAL MODEL FOR AGRICULTURAL DRONE DEPLOYMENT: {best_model[0]}")
     print(f"   Research Drone Score: {best_model[1]:.1f}/100")
     print(f"   Accuracy: {best_model[2]['accuracy']:.1%}")
     print(f"   Inference Speed: {best_model[2]['inference_time_ms_mean']:.2f}±{best_model[2]['inference_time_ms_std']:.2f}ms")
@@ -763,17 +763,17 @@ def main():
     print(f"   Throughput: {best_model[2]['throughput_imgs_per_sec']:.1f} images/second")
     
     # Research dataset summary
-    print(f"\n📊 RESEARCH DATASET SUMMARY")
+    print(f"\nRESEARCH DATASET SUMMARY")
     print(f"   Total samples evaluated: {cnn_quant_metrics['total_samples']:,}")
     print(f"   Number of classes: {cnn_quant_metrics['num_classes_evaluated']}")
     print(f"   Evaluation batches: {cnn_quant_metrics['evaluation_batches']}")
     
     # File outputs for research
-    print(f"\n💾 RESEARCH OUTPUT FILES")
-    print(f"   📁 Directory: {quantizer.save_dir.absolute()}")
-    print(f"   📄 CNN Quantized: {cnn_save_path.name}")
-    print(f"   📄 DINOv2 Quantized: {dino_save_path.name}")
-    print(f"\n📝 RESEARCH NOTES:")
+    print(f"\n RESEARCH OUTPUT FILES")
+    print(f"    Directory: {quantizer.save_dir.absolute()}")
+    print(f"    CNN Quantized: {cnn_save_path.name}")
+    print(f"    DINOv2 Quantized: {dino_save_path.name}")
+    print(f"\n RESEARCH NOTES:")
     print(f"   • Models saved with comprehensive metadata for paper writing")
     print(f"   • Per-class accuracy metrics included for detailed analysis")
     print(f"   • Statistical measures (mean, std) provided for reproducibility")
@@ -783,7 +783,7 @@ def main():
     
     # Research timing summary
     total_time = cnn_quant_time + dino_quant_time
-    print(f"\n⏱️  RESEARCH TIMING SUMMARY")
+    print(f"\nRESEARCH TIMING SUMMARY")
     print(f"   • CNN quantization: {cnn_quant_time:.2f}s")
     print(f"   • DINOv2 quantization: {dino_quant_time:.2f}s")
     print(f"   • Total quantization time: {total_time:.2f}s")

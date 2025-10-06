@@ -13,7 +13,7 @@ L40S_CONSERVATIVE = {
     'gradient_accum_steps': 2,
     'effective_batch': 256,
     'num_workers': 8,
-    'description': '✅ Safe for L40S, ~7-8 hours for full dataset',
+    'description': 'Safe for L40S, ~7-8 hours for full dataset',
     # Learning rate configurations for different training regimes
     'learning_rates': {
         'linear_probe': {
@@ -43,7 +43,7 @@ L40S_AGGRESSIVE = {
     'gradient_accum_steps': 2,
     'effective_batch': 384,
     'num_workers': 8,
-    'description': '⚠️ May OOM on large models, test first. ~5-6 hours if successful',
+    'description': 'WARNING: May OOM on large models, test first. ~5-6 hours if successful',
     'learning_rates': {
         'linear_probe': {
             'base_lr': 0.0008,
@@ -72,7 +72,7 @@ A100_OPTIMAL = {
     'gradient_accum_steps': 1,  # No accumulation needed!
     'effective_batch': 256,
     'num_workers': 18,
-    'description': '✅ Perfect for A100, ~3-4 hours for full dataset',
+    'description': 'Perfect for A100, ~3-4 hours for full dataset',
     'learning_rates': {
         'linear_probe': {
             'base_lr': 0.0008,
@@ -101,7 +101,7 @@ A100_ULTRA = {
     'gradient_accum_steps': 1,
     'effective_batch': 384,
     'num_workers': 18,
-    'description': '🚀 Fastest possible, ~2-3 hours. Requires LR adjustment (×1.5)',
+    'description': 'Fastest possible, ~2-3 hours. Requires LR adjustment (×1.5)',
     'auto_scale_lr': True,
     'lr_multiplier': 1.5,
     'learning_rates': {
@@ -133,7 +133,7 @@ H100_OPTIMAL = {
     'gradient_accum_steps': 1,
     'effective_batch': 384,
     'num_workers': 18,
-    'description': '✅ Great for H100, ~2-3 hours for full dataset',
+    'description': 'Great for H100, ~2-3 hours for full dataset',
     'learning_rates': {
         'linear_probe': {
             'base_lr': 0.0008,
@@ -162,7 +162,7 @@ H100_ULTRA = {
     'gradient_accum_steps': 1,
     'effective_batch': 512,
     'num_workers': 18,
-    'description': '🚀 Fastest possible on H100, ~1.5-2.5 hours. Requires LR adjustment (×2.0). ⚠️ May OOM on very large models, test first',
+    'description': 'Fastest possible on H100, ~1.5-2.5 hours. Requires LR adjustment (×2.0). WARNING: May OOM on very large models, test first',
     'auto_scale_lr': True,
     'lr_multiplier': 2.0,
     'learning_rates': {
@@ -201,8 +201,8 @@ GRADIENT_ACCUM_STEPS = GPU_CONFIG['gradient_accum_steps']
 EFFECTIVE_BATCH = GPU_CONFIG['effective_batch']
 NUM_WORKERS = GPU_CONFIG['num_workers']
 
-print(f"🔧 Using: {GPU_CONFIG['name']}")
-print(f"📝 {GPU_CONFIG['description']}")
+print(f"Using: {GPU_CONFIG['name']}")
+print(f" {GPU_CONFIG['description']}")
 """
 
 # =============================================================================
@@ -248,12 +248,12 @@ def apply_gpu_learning_rate_config(active_config, gpu_config, training_regime, m
         Modified active_config with GPU-optimized learning rates
     """
     if 'learning_rates' not in gpu_config:
-        print(f"⚠️ No learning_rates found in GPU config: {gpu_config.get('name', 'Unknown')}")
+        print(f"WARNING: No learning_rates found in GPU config: {gpu_config.get('name', 'Unknown')}")
         return active_config
     
     lr_config = gpu_config['learning_rates'].get(training_regime)
     if not lr_config:
-        print(f"⚠️ No learning rate config for regime '{training_regime}' in GPU config")
+        print(f"WARNING: No learning rate config for regime '{training_regime}' in GPU config")
         return active_config
     
     # Apply base learning rate and multiplier
@@ -273,7 +273,7 @@ def apply_gpu_learning_rate_config(active_config, gpu_config, training_regime, m
     active_config.WARMUP_EPOCHS = lr_config['warmup_epochs']
     active_config.WARMUP_START_LR = lr_config['warmup_start_lr']
     
-    print(f"🎯 GPU LR Config Applied:")
+    print(f"GPU LR Config Applied:")
     print(f"   Base LR: {base_lr:.6f}")
     print(f"   Multiplier: {lr_multiplier:.2f}")
     print(f"   Final LR: {final_lr:.6f}")
@@ -305,7 +305,7 @@ if __name__ == "__main__":
         print(f"  Gradient accum: {cfg['gradient_accum_steps']} steps")
         print(f"  Effective batch: {cfg['effective_batch']}")
         print(f"  Num workers: {cfg['num_workers']}")
-        print(f"  📝 {cfg['description']}")
+        print(f"   {cfg['description']}")
     
     print("\n" + "="*80)
     print("LEARNING RATE SCALING EXAMPLES")

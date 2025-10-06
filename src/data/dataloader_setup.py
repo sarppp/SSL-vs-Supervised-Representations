@@ -59,7 +59,7 @@ def create_dataloaders(train_paths, train_labels, val_paths, val_labels, test_pa
         validate_images=getattr(config_module, 'VALIDATE_IMAGES', True),
     )
     
-    # 🔧 FIX: Use smaller batch size for large test sets to reduce memory pressure
+    # FIX: Use smaller batch size for large test sets to reduce memory pressure
     train_batch_size = config_module.BATCH_SIZE
     val_batch_size = config_module.BATCH_SIZE
     test_batch_size = config_module.BATCH_SIZE
@@ -67,7 +67,7 @@ def create_dataloaders(train_paths, train_labels, val_paths, val_labels, test_pa
     # Reduce test batch size if test set is large to prevent memory issues
     if len(test_dataset) > 1000:
         test_batch_size = min(16, config_module.BATCH_SIZE)  # Max 16 for large test sets
-        print(f"🔧 Large test set detected ({len(test_dataset)} samples)")
+        print(f"Large test set detected ({len(test_dataset)} samples)")
         print(f"   Reducing test batch size: {config_module.BATCH_SIZE} → {test_batch_size}")
     
     # Create DataLoaders
@@ -103,14 +103,14 @@ def create_dataloaders(train_paths, train_labels, val_paths, val_labels, test_pa
         try:
             train_batch = next(iter(train_loader))
             train_images, train_labels_batch = train_batch
-            print(f"✅ Batch test successful!")
+            print(f"Batch test successful!")
             print(f"   Image shape: {train_images.shape}")
             print(f"   Label shape: {train_labels_batch.shape}")
             print(f"   Image range: [{train_images.min():.3f}, {train_images.max():.3f}]")
         except Exception as e:
-            print(f"❌ Batch loading error: {e}")
+            print(f" Batch loading error: {e}")
     else:
-        print(f"\n✅ DataLoaders ready for training!")
+        print(f"\nDataLoaders ready for training!")
     
     return train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset
 

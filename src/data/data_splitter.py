@@ -40,7 +40,7 @@ def split_clean_dataset(pickle_path=config_paths.CLEAN_DATASET_PICKLE, test_size
         use_relative_paths = False
         data_logger.log_dataset_loading(pickle_path, "legacy", len(image_paths))
         
-        # ✅ ADDED: Convert old absolute paths to new paths if base_data_dir provided
+        # ADDED: Convert old absolute paths to new paths if base_data_dir provided
         if base_data_dir is not None:
             data_logger.log_path_conversion(base_data_dir, "old_to_new")
             base_dir_name = os.path.basename(os.path.normpath(base_data_dir))
@@ -150,7 +150,7 @@ def split_clean_dataset(pickle_path=config_paths.CLEAN_DATASET_PICKLE, test_size
     adjusted_test_size = actual_test_size / total_samples
     adjusted_val_size = actual_val_size / total_samples
     
-    print(f"📊 Adjusted split sizes:")
+    print(f"Adjusted split sizes:")
     print(f"   Original: test={test_size:.2%}, val={val_size:.2%}")
     print(f"   Adjusted: test={adjusted_test_size:.2%} ({actual_test_size} samples), val={adjusted_val_size:.2%} ({actual_val_size} samples)")
     print(f"   Train will be: {1-adjusted_test_size-adjusted_val_size:.2%} ({actual_train_size} samples)")
@@ -164,7 +164,7 @@ def split_clean_dataset(pickle_path=config_paths.CLEAN_DATASET_PICKLE, test_size
             random_state=random_state
         )
     except ValueError as e:
-        print(f"⚠️  Stratification failed: {e}")
+        print(f"WARNING: Stratification failed: {e}")
         print("   Falling back to non-stratified split...")
         train_val_paths, test_paths, train_val_labels, test_labels = train_test_split(
             image_paths, labels,
@@ -182,7 +182,7 @@ def split_clean_dataset(pickle_path=config_paths.CLEAN_DATASET_PICKLE, test_size
             random_state=random_state
         )
     except ValueError as e:
-        print(f"⚠️  Stratification failed for train/val split: {e}")
+        print(f"WARNING: Stratification failed for train/val split: {e}")
         print("   Falling back to non-stratified split...")
         train_paths, val_paths, train_labels, val_labels = train_test_split(
             train_val_paths, train_val_labels,
@@ -192,11 +192,11 @@ def split_clean_dataset(pickle_path=config_paths.CLEAN_DATASET_PICKLE, test_size
     
     # Final validation - ensure no empty sets
     if len(test_paths) == 0:
-        raise ValueError("❌ Test set is empty! This should not happen after adjustments.")
+        raise ValueError(" Test set is empty! This should not happen after adjustments.")
     if len(val_paths) == 0:
-        raise ValueError("❌ Validation set is empty! This should not happen after adjustments.")
+        raise ValueError(" Validation set is empty! This should not happen after adjustments.")
     if len(train_paths) == 0:
-        raise ValueError("❌ Training set is empty! This should not happen after adjustments.")
+        raise ValueError(" Training set is empty! This should not happen after adjustments.")
 
     # Print detailed split statistics
     total_images = len(image_paths)
@@ -293,17 +293,17 @@ def apply_label_hiding_few_shot(train_paths, train_labels, mode=None, value=0.1,
     labeled_samples = len(labeled_indices)
     unlabeled_samples = total_samples - labeled_samples
     
-    print(f"🎯 LABEL HIDING FEW-SHOT VERIFICATION:")
-    print(f"   📊 Total images: {total_images:,}")
-    print(f"   📊 Total labels: {total_labels:,}")
-    print(f"   📊 Unique classes: {unique_classes}")
-    print(f"   ✅ Labeled samples: {labeled_samples:,} ({labeled_samples/total_samples*100:.1f}%)")
-    print(f"   ❌ Unlabeled samples: {unlabeled_samples:,} ({unlabeled_samples/total_samples*100:.1f}%)")
-    print(f"   🔍 Sanity check: images={total_images} == labels={total_labels} == samples={total_samples}")
+    print(f"LABEL HIDING FEW-SHOT VERIFICATION:")
+    print(f"   Total images: {total_images:,}")
+    print(f"   Total labels: {total_labels:,}")
+    print(f"   Unique classes: {unique_classes}")
+    print(f"   Labeled samples: {labeled_samples:,} ({labeled_samples/total_samples*100:.1f}%)")
+    print(f"    Unlabeled samples: {unlabeled_samples:,} ({unlabeled_samples/total_samples*100:.1f}%)")
+    print(f"   Sanity check: images={total_images} == labels={total_labels} == samples={total_samples}")
     
     # Show per-class labeled distribution
     labeled_class_counts = Counter([train_labels[i] for i in labeled_indices])
-    print(f"   📈 Labeled samples per class:")
+    print(f"   Labeled samples per class:")
     for class_name, count in sorted(labeled_class_counts.items()):
         print(f"      {class_name}: {count} samples")
     

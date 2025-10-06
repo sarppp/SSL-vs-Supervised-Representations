@@ -25,12 +25,12 @@ def evaluate_model(model, test_loader, device, class_names, use_amp=False, eval_
     all_true_labels = []
     all_probabilities = []
     
-    # 🔧 FIX: Process in smaller chunks to reduce memory pressure
-    print(f"🔍 Evaluating {len(test_loader.dataset)} samples in {len(test_loader)} batches...")
+    # FIX: Process in smaller chunks to reduce memory pressure
+    print(f"Evaluating {len(test_loader.dataset)} samples in {len(test_loader)} batches...")
     
     with torch.no_grad():
         for batch_idx, (images, labels) in enumerate(test_loader):
-            # 🔧 Add progress info for large test sets
+            # Add progress info for large test sets
             if batch_idx % 20 == 0:
                 print(f"   Processing batch {batch_idx+1}/{len(test_loader)}...")
                 
@@ -50,7 +50,7 @@ def evaluate_model(model, test_loader, device, class_names, use_amp=False, eval_
             all_true_labels.extend(labels.cpu().numpy())
             all_probabilities.extend(probabilities.cpu().numpy())
             
-            # 🔧 FIX: Clear GPU cache periodically during large evaluations
+            # FIX: Clear GPU cache periodically during large evaluations
             if batch_idx % 20 == 0 and torch.cuda.is_available():
                 torch.cuda.empty_cache()
     
@@ -65,7 +65,7 @@ def evaluate_model(model, test_loader, device, class_names, use_amp=False, eval_
     if eval_logger:
         eval_logger.log_test_accuracy(test_accuracy)
     
-    print(f"✅ Evaluation complete: {test_accuracy:.2f}% accuracy on {len(y_true)} samples")
+    print(f"Evaluation complete: {test_accuracy:.2f}% accuracy on {len(y_true)} samples")
     
     return y_true, y_pred, y_prob, test_accuracy
 
@@ -81,7 +81,7 @@ def analyze_class_balance_performance(y_true, y_pred, class_names, eval_logger=N
 
 def save_confusion_matrix_plot(cm, class_names, model_name, config_module=None):
     """
-    🎓 THESIS: Save confusion matrix as high-quality plot for thesis/papers
+    THESIS: Save confusion matrix as high-quality plot for thesis/papers
     """
     from src.config import config_paths
     
@@ -138,7 +138,7 @@ def save_confusion_matrix_plot(cm, class_names, model_name, config_module=None):
     plt.savefig(png_path, dpi=300, bbox_inches='tight')
     plt.close()
     
-    print(f"📊 Confusion matrix saved:")
+    print(f"Confusion matrix saved:")
     print(f"   PNG: {png_path}")
     
     return png_path
@@ -204,7 +204,7 @@ def comprehensive_test_evaluation(model, test_loader, device, class_names, model
                 'sample_count': int(class_count)
             }
     
-    # 🎓 THESIS-QUALITY METRICS: Precision, Recall, F1, Confusion Matrix, etc.
+    # THESIS-QUALITY METRICS: Precision, Recall, F1, Confusion Matrix, etc.
     precision, recall, f1, support = precision_recall_fscore_support(
         y_true, y_pred, average=None, zero_division=0
     )
@@ -224,21 +224,47 @@ def comprehensive_test_evaluation(model, test_loader, device, class_names, model
     # Matthews Correlation Coefficient (robust metric)
     mcc = float(matthews_corrcoef(y_true, y_pred))
     
-    # Multi-class ROC-AUC (if probabilities available)
+    # Multi-class ROC-AUC (if probabilities available) - IMPROVED VERSION
     try:
-        # Check if y_prob is valid and has the right shape
-        if y_prob is not None and len(y_prob) > 0 and y_prob.shape[1] > 1:
-            # Ensure probabilities are valid (not NaN, not all zeros)
-            if not np.any(np.isnan(y_prob)) and not np.all(y_prob == 0):
-                roc_auc = float(roc_auc_score(y_true, y_prob, multi_class='ovr', average='macro'))
+        if y_prob is not None and len(y_prob) > 0:
+            if y_prob.ndim == 2 and y_prob.shape[1] > 1:
+                # Check for problematic values and handle them
+                has_nan = np.any(np.isnan(y_prob))
+                has_inf = np.any(np.isinf(y_prob))
+                all_zeros = np.all(y_prob == 0)
+                
+                if has_nan or has_inf:
+                    print(f"WARNING: Found problematic values in probabilities: NaN={has_nan}, Inf={has_inf}")
+                    # Replace problematic values with small epsilon to maintain probability structure
+                    y_prob_clean = np.nan_to_num(y_prob, nan=1e-8, posinf=1.0, neginf=1e-8)
+                else:
+                    y_prob_clean = y_prob.copy()
+                
+                # Ensure proper probability normalization (each row sums to 1)
+                row_sums = y_prob_clean.sum(axis=1, keepdims=True)
+                row_sums[row_sums == 0] = 1.0  # avoid division by zero
+                y_prob_normalized = y_prob_clean / row_sums
+                
+                # Additional check for all zeros after normalization
+                if np.all(y_prob_normalized == 0):
+                    print("WARNING: All probabilities are zero after normalization")
+                    roc_auc = None
+                else:
+                    # Compute ROC-AUC with improved error handling
+                    roc_auc = float(roc_auc_score(
+                        y_true, y_prob_normalized, 
+                        multi_class='ovr', 
+                        average='macro'
+                    ))
+                    print(f"ROC-AUC calculated successfully: {roc_auc:.4f}")
             else:
-                print(f"⚠️ Invalid probabilities for ROC-AUC: NaN={np.any(np.isnan(y_prob))}, All zeros={np.all(y_prob == 0)}")
+                print(f"WARNING: Invalid y_prob shape for ROC-AUC: {y_prob.shape}")
                 roc_auc = None
         else:
-            print(f"⚠️ Invalid y_prob shape for ROC-AUC: {y_prob.shape if y_prob is not None else 'None'}")
+            print("WARNING: y_prob is None or empty")
             roc_auc = None
     except Exception as e:
-        print(f"⚠️ ROC-AUC calculation failed: {e}")
+        print(f"WARNING: ROC-AUC calculation failed: {e}")
         roc_auc = None
     
     # Per-class detailed metrics (for thesis tables)
@@ -260,7 +286,7 @@ def comprehensive_test_evaluation(model, test_loader, device, class_names, model
         'num_classes': len(class_names),
         'class_names': class_names,
         
-        # 🎓 THESIS METRICS: Overall scores
+        # THESIS METRICS: Overall scores
         'precision_macro': precision_macro,
         'recall_macro': recall_macro,
         'f1_macro': f1_macro,
@@ -270,10 +296,10 @@ def comprehensive_test_evaluation(model, test_loader, device, class_names, model
         'matthews_corrcoef': mcc,
         'roc_auc_ovr': roc_auc,
         
-        # 🎓 THESIS METRICS: Per-class detailed
+        # THESIS METRICS: Per-class detailed
         'per_class_metrics': per_class_detailed,
         
-        # 🎓 THESIS METRICS: Confusion matrix
+        # THESIS METRICS: Confusion matrix
         'confusion_matrix': cm.tolist(),
         
         # Original metrics
@@ -292,11 +318,11 @@ def comprehensive_test_evaluation(model, test_loader, device, class_names, model
         }
     }
     
-    # 🎓 THESIS: Save confusion matrix visualization
+    # THESIS: Save confusion matrix visualization
     try:
         save_confusion_matrix_plot(cm, class_names, model_name, config_module)
     except Exception as e:
-        print(f"⚠️ Could not save confusion matrix plot: {e}")
+        print(f"WARNING: Could not save confusion matrix plot: {e}")
     
     # Save results using evaluation logger
     results_filename = eval_logger.save_evaluation_results(evaluation_results)
@@ -312,7 +338,7 @@ def comprehensive_test_evaluation(model, test_loader, device, class_names, model
         'log_file': str(eval_logger.log_filename),
         'results_file': results_filename,
         'per_class_accuracy': per_class_acc,
-        # 🎓 THESIS: Include comprehensive metrics
+        # THESIS: Include comprehensive metrics
         'precision_macro': precision_macro,
         'recall_macro': recall_macro,
         'f1_macro': f1_macro,

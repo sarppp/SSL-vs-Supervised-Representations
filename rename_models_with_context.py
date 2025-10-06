@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🏷️ Model Renamer - Add Experiment Context to Model Names
+Model Renamer - Add Experiment Context to Model Names
 ========================================================
 This script renames your saved models to include experiment context
 so you can easily identify which experiment each model came from.
@@ -50,7 +50,7 @@ def parse_experiment_from_logs(model_id):
                     context['regime'] = 'SUPR'  # Supervised
                     
         except Exception as e:
-            print(f"⚠️ Could not parse {training_log}: {e}")
+            print(f"WARNING: Could not parse {training_log}: {e}")
     
     return context
 
@@ -68,12 +68,12 @@ def rename_models_with_context():
         locations.append(outputs_models_dir)
     
     if not locations:
-        print("❌ No model directories found")
+        print(" No model directories found")
         return
     
     renamed_count = 0
     
-    print("🏷️ RENAMING MODELS WITH EXPERIMENT CONTEXT")
+    print("RENAMING MODELS WITH EXPERIMENT CONTEXT")
     print("=" * 60)
     
     for location in locations:
@@ -88,7 +88,7 @@ def rename_models_with_context():
             
             # Skip if already renamed
             if '_LINP_' in filename or '_FINE_' in filename or '_SUPR_' in filename:
-                print(f"⏭️  Skipping (already renamed): {filename}")
+                print(f"Skipping (already renamed): {filename}")
                 continue
             
             # Extract model identifier
@@ -105,7 +105,7 @@ def rename_models_with_context():
                         model_id = "vit_base_patch16_224"
             
             if not model_id:
-                print(f"⚠️  Could not parse model ID from: {filename}")
+                print(f"WARNING: Could not parse model ID from: {filename}")
                 continue
             
             # Get experiment context
@@ -137,19 +137,19 @@ def rename_models_with_context():
             # Rename the file
             try:
                 shutil.move(str(model_file), str(new_path))
-                print(f"✅ {filename}")
+                print(f"{filename}")
                 print(f"   → {new_filename}")
                 renamed_count += 1
             except Exception as e:
-                print(f"❌ Failed to rename {filename}: {e}")
+                print(f" Failed to rename {filename}: {e}")
     
-    print(f"\n📊 SUMMARY")
+    print(f"\nSUMMARY")
     print("-" * 40)
-    print(f"✅ Renamed {renamed_count} model files")
-    print(f"🎯 Models now include experiment context in filenames")
+    print(f"Renamed {renamed_count} model files")
+    print(f"Models now include experiment context in filenames")
     
     if renamed_count > 0:
-        print(f"\n💡 Examples of new naming:")
+        print(f"\nExamples of new naming:")
         print(f"   dinov2_vitb14_LINP_10pct_best_acc25.3.pth")
         print(f"   dinov2_vitb14_FINE_50pct_best_acc48.0.pth") 
         print(f"   efficientnet_b4_SUPR_100pct_best_acc42.7.pth")

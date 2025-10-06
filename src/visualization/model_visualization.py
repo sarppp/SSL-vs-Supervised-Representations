@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🔍 Model Visualization Toolkit
+Model Visualization Toolkit
 ============================
 
 GradCAM, Feature Maps, and Attention Heat Maps for understanding model behavior.
@@ -69,14 +69,14 @@ class GradCAM:
         
         if conv_layers:
             best_layer = conv_layers[-1]  # Last conv layer
-            print(f"🎯 Auto-detected GradCAM target layer: {best_layer}")
+            print(f"Auto-detected GradCAM target layer: {best_layer}")
             return best_layer
         else:
             # Fallback for other architectures
             all_layers = [name for name, _ in self.model.named_modules()]
             if all_layers:
                 best_layer = all_layers[-2]  # Second to last layer
-                print(f"🎯 Using fallback layer: {best_layer}")
+                print(f"Using fallback layer: {best_layer}")
                 return best_layer
             else:
                 raise ValueError("Could not find suitable layer for GradCAM")
@@ -168,7 +168,7 @@ class FeatureMapVisualizer:
                 hook = modules[name].register_forward_hook(get_activation(name))
                 self.hooks.append(hook)
             else:
-                print(f"⚠️  Layer '{name}' not found")
+                print(f"WARNING: Layer '{name}' not found")
     
     def get_feature_maps(self, input_tensor, layer_name):
         """Get feature maps for a specific layer."""
@@ -211,7 +211,7 @@ class AttentionVisualizer:
             if 'attn' in name.lower() or 'attention' in name.lower():
                 hook = module.register_forward_hook(get_attention(name))
                 self.hooks.append(hook)
-                print(f"🎯 Registered attention hook: {name}")
+                print(f"Registered attention hook: {name}")
     
     def get_attention_maps(self, input_tensor):
         """Get attention maps."""
@@ -232,7 +232,7 @@ class ModelVisualizationPipeline:
     
     def __init__(self, model_path: str, config_module=None):
         """Initialize the visualization pipeline."""
-        print(f"🔍 Setting up Model Visualization Pipeline...")
+        print(f"Setting up Model Visualization Pipeline...")
         
         self.model_path = model_path
         self.config = config_module or config
@@ -247,9 +247,9 @@ class ModelVisualizationPipeline:
         self.feature_viz = FeatureMapVisualizer(self.model)
         self.attention_viz = AttentionVisualizer(self.model)
         
-        print(f"✅ Pipeline ready!")
-        print(f"🎯 Model: {Path(model_path).name}")
-        print(f"🏷️  Classes: {len(self.class_names)}")
+        print(f"Pipeline ready!")
+        print(f"Model: {Path(model_path).name}")
+        print(f"Classes: {len(self.class_names)}")
         print(f"💻 Device: {self.device}")
     
     def _load_model(self):
@@ -332,8 +332,8 @@ class ModelVisualizationPipeline:
                      for i in probabilities.argsort()[-5:][::-1]]
         }
         
-        print(f"🔍 Analyzing: {Path(image_path).name}")
-        print(f"🎯 Prediction: {self.class_names[predicted_class]} ({confidence:.3f})")
+        print(f"Analyzing: {Path(image_path).name}")
+        print(f"Prediction: {self.class_names[predicted_class]} ({confidence:.3f})")
         
         # GradCAM
         if show_gradcam:
@@ -344,7 +344,7 @@ class ModelVisualizationPipeline:
             # Save GradCAM
             gradcam_path = os.path.join(save_dir, f"gradcam_{Path(image_path).stem}.png")
             gradcam_viz.save(gradcam_path)
-            print(f"💾 GradCAM saved: {gradcam_path}")
+            print(f" GradCAM saved: {gradcam_path}")
         
         # Feature Maps
         if show_feature_maps:
@@ -353,7 +353,7 @@ class ModelVisualizationPipeline:
                 feature_viz_path = os.path.join(save_dir, f"features_{Path(image_path).stem}.png")
                 self._plot_feature_maps(feature_maps, feature_viz_path)
                 results['visualizations']['feature_maps'] = feature_viz_path
-                print(f"💾 Feature maps saved: {feature_viz_path}")
+                print(f" Feature maps saved: {feature_viz_path}")
         
         # Attention (for Vision Transformers)
         if show_attention:
@@ -362,7 +362,7 @@ class ModelVisualizationPipeline:
                 attention_viz_path = os.path.join(save_dir, f"attention_{Path(image_path).stem}.png")
                 self._plot_attention_maps(attention_maps, attention_viz_path)
                 results['visualizations']['attention'] = attention_viz_path
-                print(f"💾 Attention maps saved: {attention_viz_path}")
+                print(f" Attention maps saved: {attention_viz_path}")
         
         return results
     
@@ -475,7 +475,7 @@ class ModelVisualizationPipeline:
         assert save_dir is not None
         os.makedirs(save_dir, exist_ok=True)
         
-        print(f"🔍 Starting confusion analysis...")
+        print(f"Starting confusion analysis...")
         print(f"📁 Results will be saved to: {save_dir}")
         
         # Focus on tomato disease classes
@@ -499,7 +499,7 @@ class ModelVisualizationPipeline:
 
 def main():
     """Main function for command-line usage."""
-    parser = argparse.ArgumentParser(description='🔍 Model Visualization Toolkit')
+    parser = argparse.ArgumentParser(description='Model Visualization Toolkit')
     parser.add_argument('--model', type=str, required=True, help='Path to trained model checkpoint')
     parser.add_argument('--image', type=str, help='Single image to analyze')
     parser.add_argument('--data-dir', type=str, help='Directory of images to analyze')
@@ -530,14 +530,14 @@ def main():
                 show_feature_maps=args.features,
                 show_attention=args.attention
             )
-            print(f"✅ Analysis complete! Results saved to {save_dir}")
+            print(f"Analysis complete! Results saved to {save_dir}")
             
         elif args.confusion:
             # Analyze confusion cases
             viz_pipeline.analyze_confusion_cases(args.data_dir, save_dir)
             
         else:
-            print("❌ Please specify --image for single image analysis or --confusion for confusion analysis")
+            print(" Please specify --image for single image analysis or --confusion for confusion analysis")
     
     finally:
         viz_pipeline.cleanup()

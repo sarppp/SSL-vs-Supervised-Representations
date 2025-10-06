@@ -605,7 +605,7 @@ def main():
     print("🚁 AGRICULTURAL DRONE DEPLOYMENT COMPARISON")
     print("="*90)
     
-    print("\n📊 COMPLETE MODEL COMPARISON")
+    print("\nCOMPLETE MODEL COMPARISON")
     print(f"{'Model':<25} | {'Acc':>6} | {'Speed':>8} | {'Memory':>8} | {'Size':>8} | {'Drone Score':>10}")
     print("-"*78)
     print(f"{'EfficientNet-B4 (Original)':<25} | {acc_cnn:.4f} | {speed_cnn:7.1f}ms | {memory_cnn:7.1f}MB | {size_cnn:7.1f}MB | {suitability_cnn:9.1f}/100")
@@ -613,7 +613,7 @@ def main():
     print(f"{'DINOv2-ViT-S/14 (Original)':<25} | {acc_dino:.4f} | {speed_dino:7.1f}ms | {memory_dino:7.1f}MB | {size_dino:7.1f}MB | {suitability_dino:9.1f}/100")
     print(f"{'DINOv2-ViT-S/14 (Dynamic)':<25} | {acc_dino_dynamic:.4f} | {speed_dino_dynamic:7.1f}ms | {memory_dino_dynamic:7.1f}MB | {size_dino_dynamic:7.1f}MB | {suitability_dino_dynamic:9.1f}/100")
     
-    print("\n📊 QUANTIZATION METHODS COMPARISON")
+    print("\nQUANTIZATION METHODS COMPARISON")
     print(f"{'Model':<25} | {'Acc':>6} | {'Speed':>8} | {'Memory':>8} | {'Size':>8} | {'Drone Score':>10}")
     print("-"*78)
     print(f"{'EfficientNet-B4 (Dynamic)':<25} | {acc_cnn_dynamic:.4f} | {speed_cnn_dynamic:7.1f}ms | {memory_cnn_dynamic:7.1f}MB | {size_cnn_dynamic:7.1f}MB | {suitability_cnn_dynamic:9.1f}/100")
@@ -621,7 +621,7 @@ def main():
 
     # --- Drone Deployment Recommendations ---
     print("\n" + "="*90)
-    print("🎯 DRONE DEPLOYMENT RECOMMENDATIONS")
+    print("DRONE DEPLOYMENT RECOMMENDATIONS")
     print("="*90)
     
     # Find best model
@@ -634,7 +634,7 @@ def main():
     
     best_model = max(models, key=lambda x: x[1])
     
-    print(f"\n🏆 RECOMMENDED FOR DRONE DEPLOYMENT: {best_model[0]}")
+    print(f"\nRECOMMENDED FOR DRONE DEPLOYMENT: {best_model[0]}")
     print(f"   Drone Suitability Score: {best_model[1]:.1f}/100")
     print(f"   Accuracy: {best_model[2]:.1%}")
     print(f"   Inference Speed: {best_model[3]:.1f}ms per image")
@@ -644,19 +644,19 @@ def main():
     # Drone-specific considerations
     print(f"\n🚁 DRONE CONSIDERATIONS:")
     if best_model[3] <= 10:
-        print(f"   ✅ Real-time processing: {best_model[3]:.1f}ms is fast enough for live video")
+        print(f"   Real-time processing: {best_model[3]:.1f}ms is fast enough for live video")
     else:
-        print(f"   ⚠️  Processing speed: {best_model[3]:.1f}ms may cause delays in live detection")
+        print(f"   WARNING: Processing speed: {best_model[3]:.1f}ms may cause delays in live detection")
     
     if best_model[4] <= 100:
-        print(f"   ✅ Memory efficient: {best_model[4]:.1f}MB fits in most drone computers")
+        print(f"   Memory efficient: {best_model[4]:.1f}MB fits in most drone computers")
     else:
-        print(f"   ⚠️  High memory usage: {best_model[4]:.1f}MB may require more powerful hardware")
+        print(f"   WARNING: High memory usage: {best_model[4]:.1f}MB may require more powerful hardware")
     
     if best_model[5] <= 50:
-        print(f"   ✅ Storage friendly: {best_model[5]:.1f}MB model fits easily on drone storage")
+        print(f"   Storage friendly: {best_model[5]:.1f}MB model fits easily on drone storage")
     else:
-        print(f"   ⚠️  Large model size: {best_model[5]:.1f}MB may require external storage")
+        print(f"   WARNING: Large model size: {best_model[5]:.1f}MB may require external storage")
     
     print(f"\n📋 DEPLOYMENT NOTES:")
     print(f"   • Quantization reduces model size by ~70% and improves speed by ~30%")
@@ -666,20 +666,20 @@ def main():
     
     # Timing summary
     total_time = cnn_quant_time + dino_quant_time + cnn_dynamic_time + dino_dynamic_time
-    print(f"\n⏱️  TIMING SUMMARY:")
+    print(f"\nTIMING SUMMARY:")
     print(f"   • EfficientNet-B4 Dynamic: {cnn_dynamic_time:.1f}s")
     print(f"   • DINOv2 Dynamic: {dino_dynamic_time:.1f}s")
     print(f"   • Total quantization time: {total_time:.1f}s")
     
     # Model saving summary
-    print(f"\n💾 MODEL SAVING SUMMARY:")
+    print(f"\n MODEL SAVING SUMMARY:")
     print(f"   • Quantized models saved to: {quantized_dir.absolute()}")
     print(f"   • Original EfficientNet-B4: {cnn_original_path}")
     print(f"   • EfficientNet-B4 Dynamic: {cnn_dynamic_path}")
     print(f"   • Original DINOv2: {dino_original_path}")
     print(f"   • DINOv2 Dynamic: {dino_dynamic_path}")
     print(f"   • DINOv2 PTQ: {dino_ptq_path}")
-    print(f"\n📁 To load these models later:")
+    print(f"\n To load these models later:")
     print(f"   checkpoint = torch.load('{dino_ptq_path}', map_location='cpu')")
     print(f"   model.load_state_dict(checkpoint['model_state_dict'])")
     

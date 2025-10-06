@@ -17,10 +17,10 @@ def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False
         import config as default_config
         config_module = default_config
         # Debug: Check what model actually is
-    # print(f"🔍 DEBUG: model type = {type(model)}")
-    # print(f"🔍 DEBUG: model has train method = {hasattr(model, 'train')}")
-    # print(f"🔍 DEBUG: model = {model}")
-    # 🔥 GRADIENT ACCUMULATION SETUP
+    # print(f"DEBUG: model type = {type(model)}")
+    # print(f"DEBUG: model has train method = {hasattr(model, 'train')}")
+    # print(f"DEBUG: model = {model}")
+    # GRADIENT ACCUMULATION SETUP
     gradient_accum_steps = getattr(config_module, 'GRADIENT_ACCUM_STEPS', 1)
     effective_batch_size = getattr(config_module, 'EFFECTIVE_BATCH_SIZE', config_module.BATCH_SIZE)
     
@@ -33,7 +33,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False
     if training_logger:
         training_logger.log_debug_info(train_loader, model, epoch)
         if gradient_accum_steps > 1 and epoch == 0:
-            training_logger.logger.info(f"📈 Gradient accumulation: {gradient_accum_steps} steps, effective batch: {effective_batch_size}")
+            training_logger.logger.info(f"Gradient accumulation: {gradient_accum_steps} steps, effective batch: {effective_batch_size}")
 
     # Create a single GradScaler per epoch (recommended) rather than one per batch
     scaler = GradScaler('cuda', enabled=use_amp and device.type == 'cuda')
@@ -51,7 +51,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False
         if valid_mask.sum() == 0:
             # Optionally log the skipped batch for debug purposes
             if training_logger and batch_idx == 0 and epoch == 0:
-                training_logger.logger.info("⚠️  Skipping batch with no labeled samples (few-shot)")
+                training_logger.logger.info("WARNING: Skipping batch with no labeled samples (few-shot)")
             continue
 
         images = images[valid_mask]
@@ -61,7 +61,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False
         if training_logger:
             training_logger.log_batch_debug(images, labels, epoch, batch_idx)
 
-        # 🔥 GRADIENT ACCUMULATION: Only zero gradients at start of accumulation cycle
+        # GRADIENT ACCUMULATION: Only zero gradients at start of accumulation cycle
         if batch_idx % gradient_accum_steps == 0:
             optimizer.zero_grad()
 

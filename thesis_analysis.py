@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🎓 Thesis Analysis & Visualization Suite
+Thesis Analysis & Visualization Suite
 Generates publication-quality tables and figures from experimental results
 """
 
@@ -27,7 +27,7 @@ def load_comparison_results(results_file=None):
             raise FileNotFoundError("No comparison results found!")
         results_file = max(results_files, key=lambda x: Path(x).stat().st_mtime)
     
-    print(f"📂 Loading results from: {results_file}")
+    print(f" Loading results from: {results_file}")
     with open(results_file, 'r') as f:
         data = json.load(f)
     # Handle two formats:
@@ -134,12 +134,12 @@ def save_latex_table(df, filename='thesis_results_table.tex'):
     with open(output_path, 'w') as f:
         f.write(latex_str)
     
-    print(f"📝 LaTeX table saved: {output_path}")
+    print(f" LaTeX table saved: {output_path}")
     return output_path
 
 def plot_label_efficiency_curve(results, output_dir='outputs/plots'):
     """
-    🎓 THESIS FIGURE: Label efficiency curves
+    THESIS FIGURE: Label efficiency curves
     Shows how accuracy scales with % of labeled data
     """
     Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -201,7 +201,7 @@ def plot_label_efficiency_curve(results, output_dir='outputs/plots'):
     plt.savefig(png_path, dpi=300, bbox_inches='tight')
     plt.close()
     
-    print(f"📊 Label efficiency plot saved:")
+    print(f"Label efficiency plot saved:")
     print(f"   PNG: {png_path}")
     
     # Create individual budget comparison plots
@@ -275,11 +275,11 @@ def create_budget_comparison_plots(results, output_dir='outputs/plots'):
         plt.savefig(budget_png_path, dpi=300, bbox_inches='tight')
         plt.close()
         
-        print(f"📊 Budget comparison plot saved: {budget_png_path}")
+        print(f"Budget comparison plot saved: {budget_png_path}")
 
 def plot_model_comparison_bar(results, output_dir='outputs/plots'):
     """
-    🎓 THESIS FIGURE: Model comparison bar chart
+    THESIS FIGURE: Model comparison bar chart
     Show available metrics across models and label budgets.
     - Always plots Accuracy
     - Plots Precision/Recall/F1 only if present in results
@@ -315,7 +315,7 @@ def plot_model_comparison_bar(results, output_dir='outputs/plots'):
         })
 
     if not rows:
-        print("⚠️ No successful results to plot.")
+        print("WARNING: No successful results to plot.")
         return None
 
     df = pd.DataFrame(rows).set_index('ModelConfig')
@@ -357,7 +357,7 @@ def plot_model_comparison_bar(results, output_dir='outputs/plots'):
     plt.savefig(png_path, dpi=300, bbox_inches='tight')
     plt.close()
 
-    print(f"📊 Model comparison plot saved:")
+    print(f"Model comparison plot saved:")
     print(f"   PNG: {png_path}")
 
     return png_path
@@ -396,9 +396,9 @@ def append_efficiency_summary_to_executive(results, output_file='outputs/executi
     try:
         with open(output_file, 'a') as f:
             f.write("\n" + "\n".join(lines) + "\n")
-        print("📝 Added AULC summary to:", output_file)
+        print(" Added AULC summary to:", output_file)
     except Exception as e:
-        print("⚠️ Could not append AULC summary:", e)
+        print("WARNING: Could not append AULC summary:", e)
 
 def generate_executive_summary(results, output_file='outputs/executive_summary.txt'):
     """Generate executive summary for thesis"""
@@ -457,13 +457,13 @@ def generate_executive_summary(results, output_file='outputs/executive_summary.t
 ║             SUMMARY OF EXPERIMENTS            ║
 ╚══════════════════════════════════════════════════════════════════╝
 
-📊 EXPERIMENT OVERVIEW
+EXPERIMENT OVERVIEW
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Total Experiments:     {total_experiments}
 Successful:            {successful_experiments}
 Failed:                {total_experiments - successful_experiments}
 
-🏆 BEST PERFORMING MODEL
+BEST PERFORMING MODEL
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Model:                 {best.get('model_type', 'N/A').upper() if best.get('model_type') else 'N/A'}
 Training Regime:       {best.get('training_regime', 'N/A')}
@@ -474,7 +474,7 @@ Recall (macro):        {fmt_metric(best.get('recall_macro'), precision=3)}
 F1-Score (macro):      {fmt_metric(best.get('f1_macro'), precision=3)}
 Matthews Corr. Coef:   {fmt_metric(best.get('matthews_corrcoef'), precision=3)}
 
-📈 PERFORMANCE BY LABEL BUDGET
+PERFORMANCE BY LABEL BUDGET
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
     
@@ -519,7 +519,7 @@ Matthews Corr. Coef:   {fmt_metric(best.get('matthews_corrcoef'), precision=3)}
         f.write(summary)
     
     print(summary)
-    print(f"\n📄 Executive summary saved: {output_file}")
+    print(f"\n Executive summary saved: {output_file}")
     
     return output_file
 

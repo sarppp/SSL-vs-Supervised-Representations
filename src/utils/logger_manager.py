@@ -95,7 +95,7 @@ class TrainingLogger:
             'start_time': self.session_start.isoformat()
         })
         
-        self.logger.info("🚀 STARTING TRAINING SESSION")
+        self.logger.info("STARTING TRAINING SESSION")
         self.logger.info(f" Max epochs: {config_dict.get('EPOCHS', 'N/A')}")
         self.logger.info(f" Early stopping patience: {config_dict.get('EARLY_STOPPING_PATIENCE', 'N/A')}")
         self.logger.info(f" Save directory: {config_dict.get('SAVE_DIR', 'N/A')}")
@@ -736,7 +736,7 @@ class ModelSetupLogger:
                 error_msg = error if error else "Unknown error"
                 self.logger.info(f" Could not enable gradient checkpointing: {error_msg}")
         else:
-            self.logger.info("⚠️  Gradient checkpointing not supported by this model")
+            self.logger.info("WARNING: Gradient checkpointing not supported by this model")
     
     def log_model_compilation(self, success: bool, error: Optional[str] = None):
         """Log model compilation status."""

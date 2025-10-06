@@ -31,7 +31,7 @@ def clean_and_save_dataset(data_dir, save_path, max_workers=None, use_relative_p
     if max_workers is None:
         max_workers = max(1, mp.cpu_count() - 1)
     
-    print(f"🔍 Scanning dataset directory: {data_dir}")
+    print(f"Scanning dataset directory: {data_dir}")
     
     # Collect original data
     original_data = []
@@ -51,8 +51,8 @@ def clean_and_save_dataset(data_dir, save_path, max_workers=None, use_relative_p
             class_images.sort()
             original_data.extend(class_images)
 
-    print(f"📊 Found: {len(original_data)} images across {len(set(label for _, label in original_data))} classes")
-    print(f"🚀 Using {max_workers} CPU cores for validation...")
+    print(f"Found: {len(original_data)} images across {len(set(label for _, label in original_data))} classes")
+    print(f"Using {max_workers} CPU cores for validation...")
     
     # Parallel validation with progress bar
     clean_paths, clean_labels = [], []
@@ -62,7 +62,7 @@ def clean_and_save_dataset(data_dir, save_path, max_workers=None, use_relative_p
         results = list(tqdm(
             executor.map(validate_image, original_data), 
             total=len(original_data),
-            desc="🔍 Validating images",
+            desc="Validating images",
             unit="img",
             ncols=80
         ))
@@ -79,11 +79,11 @@ def clean_and_save_dataset(data_dir, save_path, max_workers=None, use_relative_p
         else:
             corrupted_files.append(path)
 
-    print(f"\n✅ Clean: {len(clean_paths)} images")
-    print(f"🗑️ Removed: {len(corrupted_files)} corrupted images")
+    print(f"\nClean: {len(clean_paths)} images")
+    print(f"Removed: {len(corrupted_files)} corrupted images")
     
     if corrupted_files:
-        print(f"📝 Corrupted files:")
+        print(f" Corrupted files:")
         for file in corrupted_files[:5]:  # Show first 5
             print(f"  - {file}")
         if len(corrupted_files) > 5:
@@ -101,7 +101,7 @@ def clean_and_save_dataset(data_dir, save_path, max_workers=None, use_relative_p
     min_class = min(distribution.values())
     max_class = max(distribution.values())
     
-    print(f"\n📈 Dataset statistics:")
+    print(f"\nDataset statistics:")
     print(f"  Average per class: {avg_per_class:.1f}")
     print(f"  Min class size: {min_class:,}")
     print(f"  Max class size: {max_class:,}")
@@ -123,7 +123,7 @@ def clean_and_save_dataset(data_dir, save_path, max_workers=None, use_relative_p
         pickle.dump(dataset_info, f)
     
     file_size = os.path.getsize(save_path) / (1024 * 1024)  # MB
-    print(f"\n💾 Clean dataset saved to: {save_path} ({file_size:.2f} MB)")
+    print(f"\n Clean dataset saved to: {save_path} ({file_size:.2f} MB)")
     
     return clean_paths, clean_labels
 

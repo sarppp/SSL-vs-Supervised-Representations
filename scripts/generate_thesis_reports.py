@@ -91,6 +91,59 @@ def collect_results():
     return results
 
 
+def format_transform_params(transform_config, transform_name):
+    """Format transform parameters into a readable string with actual values.
+    
+    Supports the specific augmentation techniques used in this project:
+    - resize, horizontal_flip, vertical_flip, rotation
+    - affine (translate, scale), color_jitter (brightness, contrast, saturation, hue)
+    - extra_brightness, extra_contrast, normalize (mean, std)
+    """
+    if not transform_config:
+        return None
+    
+    if isinstance(transform_config, dict):
+        if transform_name == 'rotation':
+            degrees = transform_config.get('degrees', 0)
+            return f"rotation={degrees}°"
+        elif transform_name == 'affine':
+            translate = transform_config.get('translate', [0, 0])
+            scale = transform_config.get('scale', [1.0, 1.0])
+            shear = transform_config.get('shear', 0)
+            return f"affine(translate={translate}, scale={scale}, shear={shear})"
+        elif transform_name == 'color_jitter':
+            brightness = transform_config.get('brightness', 0)
+            contrast = transform_config.get('contrast', 0)
+            saturation = transform_config.get('saturation', 0)
+            hue = transform_config.get('hue', 0)
+            return f"color_jitter(brightness={brightness}, contrast={contrast}, saturation={saturation}, hue={hue})"
+        elif transform_name == 'normalize':
+            mean = transform_config.get('mean', [0.485, 0.456, 0.406])
+            std = transform_config.get('std', [0.229, 0.224, 0.225])
+            return f"normalize(mean={mean}, std={std})"
+        else:
+            # Generic dict formatting
+            params = ", ".join([f"{k}={v}" for k, v in transform_config.items()])
+            return f"{transform_name}({params})"
+    else:
+        # Simple value (like rotation degrees, vertical_flip probability, etc.)
+        if transform_name == 'rotation':
+            return f"rotation={transform_config}°"
+        elif transform_name == 'vertical_flip':
+            return f"vertical_flip={transform_config}"
+        elif transform_name == 'resize':
+            if isinstance(transform_config, list) and len(transform_config) == 2:
+                return f"resize={transform_config[0]}x{transform_config[1]}"
+            else:
+                return f"resize={transform_config}"
+        elif transform_name == 'extra_brightness':
+            return f"extra_brightness={transform_config}"
+        elif transform_name == 'extra_contrast':
+            return f"extra_contrast={transform_config}"
+        else:
+            return f"{transform_name}={transform_config}"
+
+
 def write_methods_txt(results):
     lines = []
     lines.append('='*80)
@@ -117,11 +170,42 @@ def write_methods_txt(results):
             lines.append(f"  Scheduler: {cfg.get('SCHEDULER')} warmup={cfg.get('USE_WARMUP')} warmup_epochs={cfg.get('WARMUP_EPOCHS')}")
             lines.append(f"  Mixed precision: {cfg.get('MIXED_PRECISION')} grad_accum_steps={cfg.get('GRADIENT_ACCUM_STEPS')}")
             lines.append(f"  Image size: {tuple(cfg.get('IMAGE_SIZE', (224, 224)))}")
-            # Transforms
+            # Transforms with detailed parameters
             tr = cfg.get('TRAIN_TRANSFORMS', {})
             vr = cfg.get('VAL_TEST_TRANSFORMS', {})
-            lines.append(f"  Train transforms: resize={tr.get('resize')} augments=[flip, rotation, affine, color_jitter]")
-            lines.append(f"  Eval transforms: resize={vr.get('resize')} center-crop/resize, normalize=ImageNet mean/std")
+            
+            # Build detailed train transforms description
+            train_transforms = []
+            
+            # Transform keys actually used in this project
+            transform_keys = [
+                'resize', 'horizontal_flip', 'vertical_flip', 'rotation', 'affine', 
+                'color_jitter', 'extra_brightness', 'extra_contrast', 'normalize'
+            ]
+            
+            for key in transform_keys:
+                if tr.get(key):
+                    if key == 'horizontal_flip':
+                        train_transforms.append("horizontal_flip=True")
+                    else:
+                        formatted = format_transform_params(tr.get(key), key)
+                        if formatted:
+                            train_transforms.append(formatted)
+            
+            # Build detailed validation transforms description
+            val_transforms = []
+            for key in ['resize', 'normalize']:
+                if vr.get(key):
+                    formatted = format_transform_params(vr.get(key), key)
+                    if formatted:
+                        val_transforms.append(formatted)
+            
+            # Format the transform descriptions
+            train_desc = ", ".join(train_transforms) if train_transforms else "basic transforms"
+            val_desc = ", ".join(val_transforms) if val_transforms else "basic transforms"
+            
+            lines.append(f"  Train transforms: {train_desc}")
+            lines.append(f"  Eval transforms: {val_desc}")
         # Freeze status by regime
         if model_family == 'dinov2':
             if regime == 'linear_probe':

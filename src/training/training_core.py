@@ -181,7 +181,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
             loss_increase = val_loss > val_losses[-2]
             acc_decrease = val_acc < val_accuracies[-2]
             if loss_increase and acc_decrease:
-                training_logger.log_validation_warning(f"📉 WARNING: Both val loss increased and val acc decreased - possible overfitting start")
+                training_logger.log_validation_warning(f"WARNING: Both val loss increased and val acc decreased - possible overfitting start")
         
         # Save best model
         if val_acc > best_val_acc:

@@ -168,7 +168,7 @@ def create_model(num_classes, model_name=None, config=None, setup_logger=None):
         def _unfreeze_backbone(self):
             for param in self.features.parameters():
                 param.requires_grad = True
-            print("🔥 CNN backbone unfrozen for fine-tuning")
+            print("CNN backbone unfrozen for fine-tuning")
 
         # Dynamically attach method (use setattr to avoid Pyright argument-type warning)
         setattr(model, 'unfreeze_backbone', types.MethodType(_unfreeze_backbone, model))
@@ -212,7 +212,7 @@ def create_model(num_classes, model_name=None, config=None, setup_logger=None):
         def _unfreeze_backbone(self):
             for param in self.parameters():
                 param.requires_grad = True
-            print("🔥 CNN backbone (ResNet) unfrozen for fine-tuning")
+            print("CNN backbone (ResNet) unfrozen for fine-tuning")
 
         # Dynamically attach method (use setattr to avoid Pyright argument-type warning)
         setattr(model, 'unfreeze_backbone', types.MethodType(_unfreeze_backbone, model))
@@ -290,7 +290,7 @@ def create_model(num_classes, model_name=None, config=None, setup_logger=None):
                     """Unfreeze backbone for fine-tuning"""
                     for param in self.backbone.parameters():
                         param.requires_grad = True
-                    print("🔥 ViT backbone unfrozen for fine-tuning")
+                    print("ViT backbone unfrozen for fine-tuning")
             
             model = ViTClassifier(vit_model, classifier, embed_dim)
             
@@ -400,7 +400,7 @@ def create_model(num_classes, model_name=None, config=None, setup_logger=None):
                     """Unfreeze backbone for fine-tuning"""
                     for param in self.backbone.parameters():
                         param.requires_grad = True
-                    print("🔥 Backbone unfrozen for fine-tuning")
+                    print("Backbone unfrozen for fine-tuning")
             
             model = DINOv2Classifier(dinov2_model, classifier, embed_dim)
             
@@ -515,7 +515,7 @@ def create_scheduler(optimizer, config=None, setup_logger=None):
     # ReduceLROnPlateau cannot be used with SequentialLR (warmup)
     if use_warmup and scheduler_name == 'plateau':
         if setup_logger:
-            setup_logger.logger.warning("⚠️  Warmup disabled for plateau scheduler (incompatible with SequentialLR)")
+            setup_logger.logger.warning("WARNING: Warmup disabled for plateau scheduler (incompatible with SequentialLR)")
         use_warmup = False
     
     if use_warmup:
@@ -548,12 +548,12 @@ def create_scheduler(optimizer, config=None, setup_logger=None):
 def check_gpu_status(setup_logger=None):
     """Check and log GPU status information."""
     if setup_logger:
-        setup_logger.logger.info("🔍 Checking GPU status...")
+        setup_logger.logger.info("Checking GPU status...")
     
     cuda_available = torch.cuda.is_available()
     if not cuda_available:
         if setup_logger:
-            setup_logger.logger.error("❌ CUDA is not available! Training will use CPU.")
+            setup_logger.logger.error(" CUDA is not available! Training will use CPU.")
         return False, None
     
     device_count = torch.cuda.device_count()
@@ -561,9 +561,9 @@ def check_gpu_status(setup_logger=None):
     device_name = torch.cuda.get_device_name(current_device)
     
     if setup_logger:
-        setup_logger.logger.info(f"✅ CUDA Available: {cuda_available}")
-        setup_logger.logger.info(f"📱 GPU {current_device}: {device_name}")
-        setup_logger.logger.info(f"💾 Total Memory: {torch.cuda.get_device_properties(current_device).total_memory / 1024**3:.2f} GB")
+        setup_logger.logger.info(f"CUDA Available: {cuda_available}")
+        setup_logger.logger.info(f" GPU {current_device}: {device_name}")
+        setup_logger.logger.info(f" Total Memory: {torch.cuda.get_device_properties(current_device).total_memory / 1024**3:.2f} GB")
     
     return True, f"cuda:{current_device}"
 

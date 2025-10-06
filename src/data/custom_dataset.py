@@ -54,9 +54,9 @@ class CustomCropDataset(Dataset):
         # ``ignore_index`` can properly skip them.
         self.targets = [ignore_index if lbl == ignore_index else self.class_to_idx[lbl] for lbl in labels]
         
-        # 🔍 Pre-validate images during initialization to catch corruption early
+        # Pre-validate images during initialization to catch corruption early
         if self.validate_images:
-            print("🔍 Pre-validating images to prevent runtime corruption...")
+            print("Pre-validating images to prevent runtime corruption...")
             self._prevalidate_images()
 
     def _get_file_hash(self, filepath):
@@ -111,7 +111,7 @@ class CustomCropDataset(Dataset):
                 corrupted_files.append((img_path, error_msg))
         
         if corrupted_files:
-            print(f"⚠️  Found {len(corrupted_files)} corrupted files:")
+            print(f"WARNING: Found {len(corrupted_files)} corrupted files:")
             for filepath, error in corrupted_files[:10]:  # Show first 10
                 print(f"   {filepath}: {error}")
             if len(corrupted_files) > 10:
@@ -122,9 +122,9 @@ class CustomCropDataset(Dataset):
             with open(corrupted_list_file, 'w') as f:
                 for filepath, error in corrupted_files:
                     f.write(f"{filepath}\t{error}\n")
-            print(f"💾 Corrupted files list saved to: {corrupted_list_file}")
+            print(f" Corrupted files list saved to: {corrupted_list_file}")
         else:
-            print("✅ All images validated successfully!")
+            print("All images validated successfully!")
 
     def __len__(self):
         return len(self.image_paths)

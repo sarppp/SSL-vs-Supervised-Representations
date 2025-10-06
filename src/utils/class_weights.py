@@ -5,7 +5,7 @@ from sklearn.utils.class_weight import compute_class_weight
 
 def calculate_class_weights(train_labels, class_names):
     """Calculate class weights for handling imbalanced datasets."""
-    print(f"⚖️  Calculating class weights for balanced training...")
+    print(f"Calculating class weights for balanced training...")
     
     # Convert all labels to strings to handle mixed int/string labels
     string_train_labels = [str(label) for label in train_labels]
@@ -18,7 +18,7 @@ def calculate_class_weights(train_labels, class_names):
         # Return uniform weights for all classes
         uniform_weights = [1.0] * len(class_names)
         class_weights_tensor = torch.FloatTensor(uniform_weights)
-        print(f"✅ Uniform class weights applied: {uniform_weights[0]:.3f} for all {len(class_names)} classes")
+        print(f"Uniform class weights applied: {uniform_weights[0]:.3f} for all {len(class_names)} classes")
         return class_weights_tensor
     
     # Calculate class weights for valid labels only
@@ -41,11 +41,11 @@ def calculate_class_weights(train_labels, class_names):
     
     class_weights_tensor = torch.FloatTensor(ordered_weights)
 
-    print(f"✅ Class weights calculated:")
+    print(f"Class weights calculated:")
     for i, class_name in enumerate(class_names):
         print(f"  {class_name}: {ordered_weights[i]:.3f}")
     
-    print(f"📊 Class weights tensor shape: {class_weights_tensor.shape}")
+    print(f"Class weights tensor shape: {class_weights_tensor.shape}")
     return class_weights_tensor
 
 def analyze_class_distribution(train_labels):
@@ -71,8 +71,8 @@ def verify_dataset_consistency(train_dataset, val_dataset, test_dataset):
 
     if (train_dataset.classes == val_dataset.classes == test_dataset.classes and
         train_dataset.class_to_idx == val_dataset.class_to_idx == test_dataset.class_to_idx):
-        print("✅ All datasets have consistent class structure!")
+        print("All datasets have consistent class structure!")
         return True
     else:
-        print("⚠️  Warning: Inconsistent class structure across datasets!")
+        print("WARNING: Inconsistent class structure across datasets!")
         return False

@@ -58,7 +58,7 @@ def consolidate_logs():
     for model_id, log_types in experiments.items():
         unified_file = unified_dir / f"unified_{model_id}.log"
         
-        print(f"📌 Creating: {unified_file.name}")
+        print(f" Creating: {unified_file.name}")
         
         with open(unified_file, 'w') as outfile:
             # Header
@@ -69,35 +69,35 @@ def consolidate_logs():
             
             # Model Setup Section
             if 'setup' in log_types:
-                outfile.write("🤖 MODEL SETUP LOGS\n")
+                outfile.write(" MODEL SETUP LOGS\n")
                 outfile.write("-" * 40 + "\n")
                 try:
                     with open(log_types['setup'], 'r') as infile:
                         outfile.write(infile.read())
                 except Exception as e:
-                    outfile.write(f"❌ Error reading setup log: {e}\n")
+                    outfile.write(f" Error reading setup log: {e}\n")
                 outfile.write("\n" + "=" * 80 + "\n\n")
             
             # Training Section  
             if 'training' in log_types:
-                outfile.write("🏋️ TRAINING LOGS\n")
+                outfile.write("TRAINING LOGS\n")
                 outfile.write("-" * 40 + "\n")
                 try:
                     with open(log_types['training'], 'r') as infile:
                         outfile.write(infile.read())
                 except Exception as e:
-                    outfile.write(f"❌ Error reading training log: {e}\n")
+                    outfile.write(f" Error reading training log: {e}\n")
                 outfile.write("\n" + "=" * 80 + "\n\n")
             
             # Evaluation Section
             if 'evaluation' in log_types:
-                outfile.write("📊 EVALUATION LOGS\n") 
+                outfile.write("EVALUATION LOGS\n") 
                 outfile.write("-" * 40 + "\n")
                 try:
                     with open(log_types['evaluation'], 'r') as infile:
                         outfile.write(infile.read())
                 except Exception as e:
-                    outfile.write(f"❌ Error reading evaluation log: {e}\n")
+                    outfile.write(f" Error reading evaluation log: {e}\n")
                 outfile.write("\n" + "=" * 80 + "\n\n")
             
             # Summary
@@ -107,10 +107,10 @@ def consolidate_logs():
             outfile.write(f"Log sections: {', '.join(log_types.keys())}\n")
             outfile.write(f"Unified log: {unified_file}\n")
             
-        print(f"   ✅ Combined {len(log_types)} log files")
+        print(f"   Combined {len(log_types)} log files")
     
     print(f"\n📁 Unified logs saved to: {unified_dir}")
-    print(f"🎯 Now you only need to check one file per experiment!")
+    print(f"Now you only need to check one file per experiment!")
     
     # Create index file
     index_file = unified_dir / "INDEX.md"

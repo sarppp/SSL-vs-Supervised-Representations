@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🔍 Model Inference Visualization
+Model Inference Visualization
 Visualize what your trained models learned by testing on random images
 """
 import torch
@@ -25,9 +25,9 @@ try:
     from ..config import config_dinov2
     from ..models import model_setup
     from ..data import data_splitter
-    print("✅ All modules imported successfully")
+    print("All modules imported successfully")
 except ImportError as e:
-    print(f"❌ Import error: {e}")
+    print(f" Import error: {e}")
     print("Make sure you're running from the project root directory")
     sys.exit(1)
 
@@ -46,9 +46,9 @@ class ModelInferenceVisualizer:
         # Setup transforms
         self.transform = self._setup_transforms()
         
-        print(f"✅ Model loaded: {self.model_info['model_name']}")
-        print(f"📊 Classes: {len(self.class_names)}")
-        print(f"🎯 Training accuracy: {self.model_info.get('val_acc', 'N/A'):.2f}%")
+        print(f"Model loaded: {self.model_info['model_name']}")
+        print(f"Classes: {len(self.class_names)}")
+        print(f"Training accuracy: {self.model_info.get('val_acc', 'N/A'):.2f}%")
         print(f"📐 Image size: {self.config_module.IMAGE_SIZE}")
     
     def _load_model(self):
@@ -160,10 +160,10 @@ class ModelInferenceVisualizer:
                     axes[1, i].text(prob + 0.01, j, f'{prob:.3f}', 
                                    va='center', fontsize=8)
                 
-                print(f"📸 {Path(image_path).name}: {result['predicted_class']} ({result['confidence']:.3f})")
+                print(f" {Path(image_path).name}: {result['predicted_class']} ({result['confidence']:.3f})")
                 
             except Exception as e:
-                print(f"❌ Error processing {image_path}: {e}")
+                print(f" Error processing {image_path}: {e}")
                 axes[0, i].text(0.5, 0.5, f'Error loading\n{Path(image_path).name}', 
                               ha='center', va='center', transform=axes[0, i].transAxes)
                 axes[0, i].axis('off')
@@ -173,7 +173,7 @@ class ModelInferenceVisualizer:
         
         if save_path:
             plt.savefig(save_path, dpi=150, bbox_inches='tight')
-            print(f"💾 Visualization saved: {save_path}")
+            print(f" Visualization saved: {save_path}")
         
         plt.show()
         return fig
@@ -237,19 +237,19 @@ class ModelInferenceVisualizer:
         
         if save_path:
             plt.savefig(save_path, dpi=150, bbox_inches='tight')
-            print(f"💾 Comparison saved: {save_path}")
+            print(f" Comparison saved: {save_path}")
         
         plt.show()
         
         # Print comparison summary
-        print(f"\n🔍 MODEL COMPARISON ON {Path(image_path).name}:")
-        print(f"📊 {self.model_info['model_name']:25} | {result1['predicted_class']:25} | {result1['confidence']:.3f}")
-        print(f"📊 {other_visualizer.model_info['model_name']:25} | {result2['predicted_class']:25} | {result2['confidence']:.3f}")
+        print(f"\nMODEL COMPARISON ON {Path(image_path).name}:")
+        print(f"{self.model_info['model_name']:25} | {result1['predicted_class']:25} | {result1['confidence']:.3f}")
+        print(f"{other_visualizer.model_info['model_name']:25} | {result2['predicted_class']:25} | {result2['confidence']:.3f}")
         
         if result1['predicted_class'] == result2['predicted_class']:
-            print("✅ Both models agree!")
+            print("Both models agree!")
         else:
-            print("❌ Models disagree!")
+            print(" Models disagree!")
         
         return fig, result1, result2
 
@@ -267,14 +267,14 @@ def get_random_images_from_dataset(base_dir=None, n_images=4, random_seed=42):
             all_images.extend(class_images)
     
     if len(all_images) < n_images:
-        print(f"⚠️  Only found {len(all_images)} images, using all of them")
+        print(f"WARNING: Only found {len(all_images)} images, using all of them")
         return all_images
     
     return random.sample(all_images, n_images)
 
 def main():
     """Main function to visualize model predictions."""
-    print("🚀 Model Inference Visualization")
+    print("Model Inference Visualization")
     print("=" * 50)
     
     # Model paths (update these to match your actual model files)
@@ -283,55 +283,55 @@ def main():
     
     # Check if models exist
     if not os.path.exists(cnn_model_path):
-        print(f"❌ CNN model not found: {cnn_model_path}")
+        print(f" CNN model not found: {cnn_model_path}")
         return
     if not os.path.exists(dinov2_model_path):
-        print(f"❌ DINOv2 model not found: {dinov2_model_path}")
+        print(f" DINOv2 model not found: {dinov2_model_path}")
         return
     
-    print(f"🔍 Loading models...")
+    print(f"Loading models...")
     
     # Initialize visualizers
     cnn_viz = ModelInferenceVisualizer(cnn_model_path, config)
     dinov2_viz = ModelInferenceVisualizer(dinov2_model_path, config_dinov2)
     
-    print(f"\n📂 Getting random images from dataset...")
+    print(f"\n Getting random images from dataset...")
     random_images = get_random_images_from_dataset(n_images=4)
     
     if not random_images:
-        print("❌ No images found in dataset!")
+        print(" No images found in dataset!")
         return
     
-    print(f"🎯 Found {len(random_images)} random images")
+    print(f"Found {len(random_images)} random images")
     for img in random_images:
-        print(f"📸 {img}")
+        print(f" {img}")
     
     # Ensure visualization directory exists
     config_paths.ensure_directories()
     
-    print(f"\n🔍 Visualizing CNN predictions...")
+    print(f"\nVisualizing CNN predictions...")
     cnn_viz.visualize_predictions(
         [str(img) for img in random_images], 
         save_path=config_paths.get_visualization_path('cnn_predictions')
     )
     
-    print(f"\n🔍 Visualizing DINOv2 predictions...")
+    print(f"\nVisualizing DINOv2 predictions...")
     dinov2_viz.visualize_predictions(
         [str(img) for img in random_images], 
         save_path=config_paths.get_visualization_path('dinov2_predictions')
     )
     
-    print(f"\n🔍 Comparing models on individual images...")
+    print(f"\nComparing models on individual images...")
     for i, img_path in enumerate(random_images[:2]):  # Compare on first 2 images
-        print(f"\n🎯 Comparing on image {i+1}: {Path(img_path).name}")
+        print(f"\nComparing on image {i+1}: {Path(img_path).name}")
         cnn_viz.compare_models_on_image(
             dinov2_viz, 
             str(img_path),
             save_path=config_paths.get_visualization_path(f'comparison_image_{i+1}')
         )
     
-    print(f"\n✅ Visualization complete!")
-    print(f"📁 Check '{config_paths.VISUALIZATIONS_DIR}' directory for saved plots")
+    print(f"\nVisualization complete!")
+    print(f" Check '{config_paths.VISUALIZATIONS_DIR}' directory for saved plots")
 
 if __name__ == "__main__":
     main() 

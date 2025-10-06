@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-📁 List Saved Models - Quick Model Inventory
+ List Saved Models - Quick Model Inventory
 ============================================
 This script helps you see all the models you've saved from different experiments.
 """
@@ -37,11 +37,11 @@ def list_saved_models():
                 })
     
     if not all_models:
-        print("❌ No saved models found in 'outputs/checkpoints' or 'models' directories")
+        print(" No saved models found in 'outputs/checkpoints' or 'models' directories")
         return
     
     print("="*80)
-    print("💾 SAVED MODELS INVENTORY")
+    print(" SAVED MODELS INVENTORY")
     print("="*80)
     
     # Group by experiment type
@@ -94,19 +94,19 @@ def list_saved_models():
     
     # Display grouped results
     for group, models in sorted(experiment_groups.items()):
-        print(f"\n🏷️ {group}")
+        print(f"\n{group}")
         print("-" * 50)
         
         for model in models:
-            print(f"📌 {model['model_type']} ({model['regime']})")
-            print(f"   📁 File: {model['filename']}")
-            print(f"   📂 Path: {model['path']}")
-            print(f"   💾 Size: {model['size_mb']:.1f} MB")
+            print(f" {model['model_type']} ({model['regime']})")
+            print(f"    File: {model['filename']}")
+            print(f"    Path: {model['path']}")
+            print(f"    Size: {model['size_mb']:.1f} MB")
             print()
     
     print("="*80)
-    print(f"📊 Total models found: {len(all_models)}")
-    print("💡 Use these model paths for analysis, inference, or further training!")
+    print(f"Total models found: {len(all_models)}")
+    print("Use these model paths for analysis, inference, or further training!")
 
 if __name__ == "__main__":
     list_saved_models()
