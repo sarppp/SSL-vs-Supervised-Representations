@@ -41,10 +41,10 @@ class ThesisVisualizer:
         self.evaluation_data = self.load_evaluation_data()
         self.checkpoint_data = self.analyze_checkpoints()
         
-        # Define label percentage mappings and colors
+        # Define label percentage mappings and colors (10%, 50%, 100%)
         self.label_percentages = {
-            '0': {'name': '0% (Zero-shot)', 'color': '#E74C3C', 'suffix': '0pct'},
             '10': {'name': '10% (Few-shot)', 'color': '#F39C12', 'suffix': '10pct'},
+            '50': {'name': '50% (Half labels)', 'color': '#3498DB', 'suffix': '50pct'},
             '100': {'name': '100% (Full labels)', 'color': '#27AE60', 'suffix': '100pct'}
         }
         
@@ -127,17 +127,17 @@ class ThesisVisualizer:
     def extract_label_percentage(self, model_name):
         """Extract label percentage from model name"""
         # Check for explicit label percentage in model name
-        for percentage in ['0', '10', '100']:
+        for percentage in ['10', '50', '100']:
             if f'_label_{percentage}_' in model_name or f'label_{percentage}' in model_name:
                 return percentage
             elif f'{percentage}pct' in model_name or f'{percentage}%' in model_name:
                 return percentage
         
         # Infer from model type/name patterns
-        if 'zero_shot' in model_name or 'zeroshot' in model_name:
-            return '0'
-        elif 'few_shot' in model_name or 'fewshot' in model_name:
+        if 'few_shot' in model_name or 'fewshot' in model_name:
             return '10'
+        elif 'half_shot' in model_name or 'halfshot' in model_name or 'half_labels' in model_name:
+            return '50'
         
         # Return None for unrecognized patterns instead of defaulting to 100%
         return None
