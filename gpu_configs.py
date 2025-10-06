@@ -266,11 +266,18 @@ def apply_gpu_learning_rate_config(active_config, gpu_config, training_regime, m
         # ViT supervised training needs slightly lower LR for stability
         final_lr *= 0.8
     
+    # Apply model-specific safety caps (DINO can be sensitive to high LR)
+    if model_type == 'dinov2':
+        final_lr = min(final_lr, 1e-4)
     active_config.LEARNING_RATE = float(final_lr)
     
     # Apply warmup configuration
     active_config.USE_WARMUP = True
-    active_config.WARMUP_EPOCHS = lr_config['warmup_epochs']
+    # Ensure sufficient warmup for sensitive models
+    if model_type == 'dinov2':
+        active_config.WARMUP_EPOCHS = max(int(lr_config['warmup_epochs']), 10)
+    else:
+        active_config.WARMUP_EPOCHS = lr_config['warmup_epochs']
     active_config.WARMUP_START_LR = lr_config['warmup_start_lr']
     
     print(f"GPU LR Config Applied:")

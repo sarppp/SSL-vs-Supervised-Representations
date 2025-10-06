@@ -802,6 +802,18 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
             active_config.USE_WARMUP = True
             active_config.WARMUP_EPOCHS = 2
             active_config.WARMUP_START_LR = 1e-5
+
+        # DINOv2: safer defaults (previous LR too heavy)
+        if model_type == 'dinov2':
+            active_config.UNFREEZE_AFTER_EPOCH = int(15)
+            active_config.WEIGHT_DECAY = float(0.05)
+            # Cap LR and extend warmup for stability
+            try:
+                active_config.LEARNING_RATE = float(min(float(active_config.LEARNING_RATE), 1e-4))
+            except Exception:
+                active_config.LEARNING_RATE = float(1e-4)
+            active_config.USE_WARMUP = True
+            active_config.WARMUP_EPOCHS = int(10)
             
         print(f" Fine-tune: progressive unfreeze @ epoch {active_config.UNFREEZE_AFTER_EPOCH}, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
         
@@ -823,12 +835,22 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
                 active_config.LEARNING_RATE = float(0.0005)  # Optimized LR for ViT stability
                 active_config.DROPOUT = float(0.15)          # Higher dropout for better generalization
             else:  # dinov2 supervised (theoretical case)
-                active_config.LEARNING_RATE = float(0.0005)   # 0.0005 × 4 (linear scaling)
+                active_config.LEARNING_RATE = float(0.0001)
                 active_config.DROPOUT = float(0.1)
             
             active_config.USE_WARMUP = True
             active_config.WARMUP_EPOCHS = 3
             active_config.WARMUP_START_LR = 1e-6
+
+        # DINOv2: safer defaults for supervised as well
+        if model_type == 'dinov2':
+            active_config.WEIGHT_DECAY = float(0.05)
+            try:
+                active_config.LEARNING_RATE = float(min(float(active_config.LEARNING_RATE), 1e-4))
+            except Exception:
+                active_config.LEARNING_RATE = float(1e-4)
+            active_config.USE_WARMUP = True
+            active_config.WARMUP_EPOCHS = int(max(int(active_config.WARMUP_EPOCHS), 10))
             
         print(f" Supervised: full training, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
     
@@ -846,7 +868,7 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
         active_config.SCHEDULER = 'cosine'
         active_config.SCHEDULER_PARAMS = {'cosine': {'T_max': active_config.EPOCHS, 'eta_min': 1e-7}}
         active_config.USE_WARMUP = True
-        active_config.WARMUP_EPOCHS = 3
+        active_config.WARMUP_EPOCHS = 10 if model_type == 'dinov2' else 3
         active_config.WARMUP_START_LR = 1e-7
         
     else:  # supervised
@@ -858,7 +880,7 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
             active_config.SCHEDULER = 'plateau'
             active_config.SCHEDULER_PARAMS = {'plateau': {'mode': 'min', 'patience': 5, 'factor': 0.5}}
         active_config.USE_WARMUP = True
-        active_config.WARMUP_EPOCHS = 3
+        active_config.WARMUP_EPOCHS = 10 if model_type == 'dinov2' else 3
         active_config.WARMUP_START_LR = 1e-6
     
     # Override random seed for reproducibility
