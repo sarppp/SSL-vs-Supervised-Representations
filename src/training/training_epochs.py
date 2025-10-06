@@ -41,7 +41,8 @@ def train_epoch(model, train_loader, criterion, optimizer, device, use_amp=False
     pbar = tqdm(train_loader, desc="Training", leave=False)
 
     for batch_idx, (images, labels) in enumerate(pbar):
-        images, labels = images.to(device), labels.to(device)
+        images = images.to(device=device, non_blocking=True)
+        labels = labels.to(device=device, non_blocking=True)
 
         # --------------------------------------------------------------
         # FEW-SHOT SUPPORT: skip batches that contain *no* valid labels
@@ -133,7 +134,8 @@ def validate_epoch(model, val_loader, criterion, device, use_amp=False, epoch=0)
     with torch.no_grad():
         pbar = tqdm(val_loader, desc="Validating", leave=False)
         for batch_idx, (images, labels) in enumerate(pbar):
-            images, labels = images.to(device), labels.to(device)
+            images = images.to(device=device, non_blocking=True)
+            labels = labels.to(device=device, non_blocking=True)
 
             if use_amp:
                 with autocast('cuda'):

@@ -584,6 +584,11 @@ def setup_training(model, class_weights_tensor, config=None, setup_logger=None):
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
+    try:
+        # Use channels_last for better tensor core throughput on conv-heavy models
+        model = model.to(memory_format=torch.channels_last)
+    except Exception:
+        pass
     class_weights_tensor = class_weights_tensor.to(device)
     
     criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)

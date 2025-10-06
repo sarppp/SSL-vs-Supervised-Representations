@@ -269,10 +269,10 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
     # GPU_CONFIG = L40S_CONSERVATIVE if GPU_CONFIGS_AVAILABLE else None
     
     # OPTION 1B: A100 80GB (Optimal) - ~3-4 hours ⚡
-    GPU_CONFIG = A100_OPTIMAL if GPU_CONFIGS_AVAILABLE else None
+    # GPU_CONFIG = A100_OPTIMAL if GPU_CONFIGS_AVAILABLE else None
     
     # OPTION 1C: A100 80GB (Ultra-Fast) - ~2-3 hours 
-    # GPU_CONFIG = A100_ULTRA if GPU_CONFIGS_AVAILABLE else None
+    GPU_CONFIG = A100_ULTRA if GPU_CONFIGS_AVAILABLE else None
 
     # OPTION 1D: H100 80GB (Optimal) - ~2-3 hours ⚡
     # GPU_CONFIG = H100_OPTIMAL if GPU_CONFIGS_AVAILABLE else None
@@ -596,6 +596,9 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             print(f" Using standard loss function")
         
         # Train model (using updated model name with experiment context)
+        if device.type == 'cuda':
+            # Reset peak stats at the start of training to track current run
+            torch.cuda.reset_peak_memory_stats()
         train_result = training.train_model(
             model=model,
             train_loader=train_loader,
@@ -612,6 +615,21 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             test_loader=test_loader  # Pass test_loader for dataset size logging
         )
         
+        # Before testing, reload BEST checkpoint (avoid evaluating a worse last epoch)
+        try:
+            _best_ckpt_path = train_result.get('best_model_path') if isinstance(train_result, dict) else None
+        except Exception:
+            _best_ckpt_path = None
+        if _best_ckpt_path and os.path.exists(_best_ckpt_path):
+            try:
+                ckpt = torch.load(_best_ckpt_path, map_location=device)
+                if isinstance(ckpt, dict) and 'model_state_dict' in ckpt:
+                    model.load_state_dict(ckpt['model_state_dict'])
+                    model.eval()
+                    print(f" Reloaded best checkpoint for testing: {_best_ckpt_path}")
+            except Exception as _e:
+                print(f" Warning: could not reload best checkpoint '{_best_ckpt_path}': {_e}")
+
         # Test evaluation (using updated model name with experiment context)
         test_result = evaluation.comprehensive_test_evaluation(
             model=model,
@@ -622,6 +640,14 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
             config_module=active_config,
             use_amp=device.type == 'cuda'
         )
+        
+        # Report GPU memory usage (allocated/reserved and peaks)
+        if device.type == 'cuda':
+            alloc_gb = torch.cuda.memory_allocated() / 1e9
+            resv_gb = torch.cuda.memory_reserved() / 1e9
+            peak_alloc_gb = torch.cuda.max_memory_allocated() / 1e9
+            peak_resv_gb = torch.cuda.max_memory_reserved() / 1e9
+            print(f" GPU memory: alloc={alloc_gb:.2f}GB resv={resv_gb:.2f}GB peak_alloc={peak_alloc_gb:.2f}GB peak_resv={peak_resv_gb:.2f}GB")
         
         end_time = time.time()
         
@@ -732,7 +758,7 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
         # Linear probe: freeze backbone, only train classifier head
         active_config.FREEZE_BACKBONE = True
         active_config.UNFREEZE_AFTER_EPOCH = int(999)  # Never unfreeze
-        active_config.EPOCHS = int(2)  # Linear probe: quick convergence (was 5 for testing) #15
+        active_config.EPOCHS = int(60)  # Linear probe works best with longer training on the head
         active_config.WEIGHT_DECAY = float(0.01)
         
         # Model-specific dropout (pre-trained features need less regularization)
@@ -744,12 +770,18 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
         # Apply GPU-specific learning rate configuration
         if current_gpu_config and GPU_CONFIGS_AVAILABLE:
             active_config = apply_gpu_learning_rate_config(active_config, current_gpu_config, 'linear_probe', model_type)
+            # Hard-cap LR for linear probe to preserve pretrained features
+            try:
+                if float(active_config.LEARNING_RATE) > 0.002:
+                    active_config.LEARNING_RATE = float(0.002)
+            except Exception:
+                active_config.LEARNING_RATE = float(0.0015)
         else:
-            # Fallback to manual configuration
-            active_config.LEARNING_RATE = float(0.004)  # 0.001 × 4 (linear scaling for batch 256)
-            active_config.USE_WARMUP = True
-            active_config.WARMUP_EPOCHS = 2
-            active_config.WARMUP_START_LR = 1e-5
+            # Fallback to manual configuration for the classifier head
+            active_config.LEARNING_RATE = float(0.0015)
+            active_config.USE_WARMUP = False
+            active_config.WARMUP_EPOCHS = 0
+            active_config.WARMUP_START_LR = 0.0
             
         print(f" Linear probe: frozen backbone, {active_config.EPOCHS} epochs, LR={active_config.LEARNING_RATE}")
         
@@ -757,7 +789,7 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
         # Fine-tuning: progressive unfreezing (only for DiNO, but keeping general)
         active_config.FREEZE_BACKBONE = True
         active_config.UNFREEZE_AFTER_EPOCH = int(3)   #  Early unfreeze
-        active_config.EPOCHS = int(3)  # Fine-tuning: needs more epochs (was 8 for testing) 25
+        active_config.EPOCHS = int(75)  # Fine-tuning: needs more epochs (was 8 for testing) 25
         active_config.WEIGHT_DECAY = float(0.01)
         active_config.DROPOUT = float(0.1)  # Lower dropout for fine-tuning
         
@@ -776,7 +808,7 @@ def run_model_with_regime(model_type='cnn', sample_size=None, few_shot_mode=None
     else:  # supervised
         # Supervised: full training from scratch
         active_config.FREEZE_BACKBONE = False
-        active_config.EPOCHS = int(3)  # Supervised: full training from scratch 25
+        active_config.EPOCHS = int(75)  # Supervised: full training from scratch 25
         active_config.WEIGHT_DECAY = float(0.01)
         
         # Apply GPU-specific learning rate configuration
@@ -1157,7 +1189,7 @@ def main():
     # SAMPLE_SIZE = 10000                            # Full experiment (12-15 hours with old batch 64)
     # SAMPLE_SIZE = 4000                             #  OPTIMIZED: ~6-7 hours with batch 256 + grad accum
     # SAMPLE_SIZE = 1000                             # Quick test (~1.5 hours)
-    SAMPLE_SIZE = 500                             # Balanced: good results in <8 hours
+    SAMPLE_SIZE = None                             # Balanced: good results in <8 hours
     
     #  CRITICAL: Label efficiency analysis - how much labeled data is needed?
     LABEL_BUDGETS = [
@@ -1177,7 +1209,14 @@ def main():
         'vit': ['supervised']   # ViT: supervised only (training from scratch)
     }
     
-    print(f" Dataset: {SAMPLE_SIZE:,} samples ({SAMPLE_SIZE/total_dataset_size*100:.1f}% of {total_dataset_size:,})")
+    if SAMPLE_SIZE is None:
+        print(f" Dataset: FULL DATASET (100% of {total_dataset_size:,})")
+    else:
+        try:
+            pct = (SAMPLE_SIZE / total_dataset_size) * 100 if total_dataset_size > 0 else 0.0
+        except Exception:
+            pct = 0.0
+        print(f" Dataset: {SAMPLE_SIZE:,} samples ({pct:.1f}% of {total_dataset_size:,})")
     print(f" Label budgets: {len(LABEL_BUDGETS)} budgets × {len(RANDOM_SEEDS)} seeds × models")
     print(f" Training regimes: {TRAINING_REGIMES}")
     

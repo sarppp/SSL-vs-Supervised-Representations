@@ -97,10 +97,10 @@ A100_OPTIMAL = {
 
 A100_ULTRA = {
     'name': 'A100 80GB Ultra-Fast',
-    'per_step_batch': 384,
+    'per_step_batch': 640, #384 or #512
     'gradient_accum_steps': 1,
-    'effective_batch': 384,
-    'num_workers': 18,
+    'effective_batch': 640, #384 or #512
+    'num_workers': 20,
     'description': 'Fastest possible, ~2-3 hours. Requires LR adjustment (×1.5)',
     'auto_scale_lr': True,
     'lr_multiplier': 1.5,

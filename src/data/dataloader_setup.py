@@ -78,12 +78,39 @@ def create_dataloaders(train_paths, train_labels, val_paths, val_labels, test_pa
     # This is especially common with small or few-shot datasets.
     # While this does discard a tiny fraction of data from each epoch (the last incomplete batch),
     # it is a standard and necessary practice for robust training. The impact on performance is negligible.
-    train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True, num_workers=config_module.NUM_WORKERS, drop_last=True)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=train_batch_size,
+        shuffle=True,
+        num_workers=config_module.NUM_WORKERS,
+        drop_last=True,
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=4
+    )
     
     # For validation and test sets, we don't drop the last batch as the model is in eval mode
     # and batch normalization layers are not being updated. This ensures we evaluate on the entire dataset.
-    val_loader = DataLoader(val_dataset, batch_size=val_batch_size, shuffle=False, num_workers=config_module.NUM_WORKERS, drop_last=False)
-    test_loader = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=False, num_workers=config_module.NUM_WORKERS, drop_last=False)
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=val_batch_size,
+        shuffle=False,
+        num_workers=config_module.NUM_WORKERS,
+        drop_last=False,
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=4
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=test_batch_size,
+        shuffle=False,
+        num_workers=config_module.NUM_WORKERS,
+        drop_last=False,
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=4
+    )
     
     # Print summary
     total_images = len(train_dataset) + len(val_dataset) + len(test_dataset)
