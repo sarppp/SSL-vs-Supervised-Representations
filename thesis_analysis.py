@@ -110,7 +110,9 @@ def create_summary_table(results):
             'Time (min)': fmt_time_seconds_to_minutes(result.get('time')),
             'Time/Epoch (s)': fmt_float(result.get('time_per_epoch'), precision=1),
             'Images/sec': fmt_float(result.get('images_per_sec'), precision=1),
-            'GPU Preset': result.get('gpu_preset', 'N/A')
+            'GPU Preset': result.get('gpu_preset', 'N/A'),
+            'Data Fraction': fmt_metric(result.get('data_fraction'), precision=0, scale=100.0) if result.get('data_fraction') is not None else 'N/A',
+            'Sample Size': fmt_int(result.get('sample_size'), default=0),
         }
         summary_data.append(row)
 
@@ -144,6 +146,11 @@ def plot_label_efficiency_curve(results, output_dir='outputs/plots'):
     """
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     
+    # Determine if all labels are 100% and data_fraction is available; if so, plot vs data %
+    all_labels = [r for r in results if r.get('success', False)]
+    label_values = {r.get('budget_value', 1.0) for r in all_labels}
+    use_data_fraction = (label_values == {1.0}) and any(r.get('data_fraction') is not None for r in all_labels)
+
     # Organize data by model/regime
     data = {}
     for result in results:
@@ -151,7 +158,13 @@ def plot_label_efficiency_curve(results, output_dir='outputs/plots'):
             continue
         
         model_regime = f"{result['model_type'].upper()} ({result.get('training_regime', 'N/A')})"
-        budget = result.get('budget_value', 0) * 100  # Convert to percentage
+        if use_data_fraction:
+            df = result.get('data_fraction', None)
+            if df is None:
+                continue
+            budget = float(df) * 100.0
+        else:
+            budget = result.get('budget_value', 0) * 100  # Convert to percentage
         accuracy = result.get('test_accuracy', 0)
         
         if model_regime not in data:
@@ -179,15 +192,17 @@ def plot_label_efficiency_curve(results, output_dir='outputs/plots'):
                 label=model_regime, color=color, markerfacecolor=color, 
                 markeredgecolor='white', markeredgewidth=1.5)
     
-    plt.xlabel('Labeled Data (%)', fontsize=14, fontweight='bold')
+    xlabel = 'Dataset Fraction (%)' if use_data_fraction else 'Labeled Data (%)'
+    title = 'Data Efficiency: Performance vs. Dataset Fraction' if use_data_fraction else 'Label Efficiency Analysis: Performance vs. Labeled Data Percentage'
+    plt.xlabel(xlabel, fontsize=14, fontweight='bold')
     plt.ylabel('Test Accuracy (%)', fontsize=14, fontweight='bold')
-    plt.title('Label Efficiency Analysis: Performance vs. Labeled Data Percentage', 
+    plt.title(title, 
               fontsize=16, fontweight='bold', pad=20)
     plt.legend(loc='best', fontsize=11, framealpha=0.9)
     plt.grid(True, alpha=0.3, linestyle='--')
     
-    # Add budget comparison annotations
-    budget_values = [10, 50, 100]
+    # Add reference lines
+    budget_values = [5, 25, 50] if use_data_fraction else [10, 50, 100]
     for budget in budget_values:
         plt.axvline(x=budget, color='gray', linestyle=':', alpha=0.5, linewidth=1)
         plt.text(budget, plt.ylim()[1] * 0.95, f'{budget}%', 
@@ -213,13 +228,23 @@ def create_budget_comparison_plots(results, output_dir='outputs/plots'):
     """Create individual plots for each budget comparison"""
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     
-    # Group results by budget
+    # Decide grouping key (dataset fraction when labels fixed at 100%)
+    successful = [r for r in results if r.get('success', False)]
+    label_values = {r.get('budget_value', 1.0) for r in successful}
+    use_data_fraction = (label_values == {1.0}) and any(r.get('data_fraction') is not None for r in successful)
+
+    # Group results by budget or data fraction
     budget_groups = {}
     for result in results:
         if not result.get('success', False):
             continue
-        
-        budget = result.get('budget_value', 0) * 100
+        if use_data_fraction:
+            df = result.get('data_fraction', None)
+            if df is None:
+                continue
+            budget = float(df) * 100.0
+        else:
+            budget = result.get('budget_value', 0) * 100
         if budget not in budget_groups:
             budget_groups[budget] = []
         budget_groups[budget].append(result)
@@ -256,7 +281,8 @@ def create_budget_comparison_plots(results, output_dir='outputs/plots'):
         
         plt.xlabel('Model Configuration', fontsize=12, fontweight='bold')
         plt.ylabel('Test Accuracy (%)', fontsize=12, fontweight='bold')
-        plt.title(f'Model Performance Comparison at {int(budget_pct)}% Labeled Data', 
+        title = f'Model Performance Comparison at {int(budget_pct)}% ' + ('Dataset Fraction' if use_data_fraction else 'Labeled Data')
+        plt.title(title, 
                  fontsize=14, fontweight='bold', pad=15)
         plt.xticks(rotation=15, ha='right')
         plt.grid(True, alpha=0.3, axis='y')
@@ -286,7 +312,12 @@ def plot_model_comparison_bar(results, output_dir='outputs/plots'):
     """
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     
-    # Build rows for all label budgets
+    # Detect if we should show dataset fractions instead of label budgets
+    successful = [r for r in results if r.get('success', False)]
+    label_values = {r.get('budget_value', 1.0) for r in successful}
+    use_data_fraction = (label_values == {1.0}) and any(r.get('data_fraction') is not None for r in successful)
+
+    # Build rows for all label budgets or data fractions
     rows = []
     has_precision = False
     has_recall = False
@@ -295,8 +326,16 @@ def plot_model_comparison_bar(results, output_dir='outputs/plots'):
     for r in results:
         if not r.get('success', False):
             continue
-        label_pct = int(r.get('budget_value', 0) * 100)
-        model_regime = f"{r['model_type'].upper()}\n({r.get('training_regime', 'N/A')})\n{label_pct}% labels"
+        if use_data_fraction:
+            try:
+                data_pct = int(round(float(r.get('data_fraction', 0)) * 100)) if r.get('data_fraction') is not None else None
+            except Exception:
+                data_pct = None
+            suffix = f"{data_pct}% data" if data_pct is not None else "100% data"
+        else:
+            label_pct = int(r.get('budget_value', 0) * 100)
+            suffix = f"{label_pct}% labels"
+        model_regime = f"{r['model_type'].upper()}\n({r.get('training_regime', 'N/A')})\n{suffix}"
 
         precision = r.get('precision_macro')
         recall = r.get('recall_macro')
@@ -342,7 +381,7 @@ def plot_model_comparison_bar(results, output_dir='outputs/plots'):
         values = df[metric].values
         ax.bar(x + i * width, values, width, label=metric, color=color)
 
-    ax.set_xlabel('Model Configuration / Label Budget', fontsize=12)
+    ax.set_xlabel('Model Configuration / ' + ('Dataset Fraction' if use_data_fraction else 'Label Budget'), fontsize=12)
     ax.set_ylabel('Score (%)', fontsize=12)
     ax.set_title('Model Performance Comparison across Label Budgets', fontsize=14, pad=15)
     ax.set_xticks(x + (len(metrics) - 1) * width / 2)

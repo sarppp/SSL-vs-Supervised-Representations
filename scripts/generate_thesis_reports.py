@@ -57,8 +57,21 @@ def collect_results():
     eval_files = sorted([p for p in EVAL_DIR.glob('*.json')])
     train_index = {p.name.replace('training_', '').replace('.json', ''): p for p in TRAIN_DIR.glob('*.json')}
 
-    # results[(model_family, regime)][label_pct] = {...}
+    # results[(model_family, regime)][key] = {...}
+    # key is label_pct by default; if all labels are 100 and data_fraction is available,
+    # downstream code can switch to using data_fraction for x-axis.
     results = defaultdict(dict)
+
+    import re
+
+    def extract_data_fraction_from_name(name: str):
+        m = re.search(r"_data(\d+)pct", name)
+        if m:
+            try:
+                return int(m.group(1)) / 100.0
+            except Exception:
+                return None
+        return None
 
     for ef in eval_files:
         model_family, regime, label_pct = parse_key(ef.name)
@@ -79,6 +92,22 @@ def collect_results():
         if tf.exists():
             t = safe_read_json(tf)
             train_cfg = t.get('session_metadata', {}).get('config', {})
+        # Attempt to read data_fraction/sample_size from either eval or training JSONs
+        data_fraction = None
+        sample_size = None
+        # Prefer explicit fields in training config if present
+        if isinstance(train_cfg, dict):
+            data_fraction = train_cfg.get('data_fraction', data_fraction)
+            sample_size = train_cfg.get('sample_size', sample_size)
+        # Fallback to evaluation file fields if present
+        if data_fraction is None:
+            data_fraction = e.get('data_fraction', None)
+        if sample_size is None:
+            sample_size = e.get('sample_size', None)
+        # Final fallback: parse from filename if embedded (e.g., _data5pct)
+        if data_fraction is None:
+            parsed_df = extract_data_fraction_from_name(ef.name)
+            data_fraction = parsed_df if parsed_df is not None else None
 
         results[(model_family, regime)][label_pct] = {
             'test_accuracy': test_acc,
@@ -86,8 +115,131 @@ def collect_results():
             'train_config': train_cfg,
             'eval_file': str(ef),
             'train_file': str(tf) if tf.exists() else None,
+            'data_fraction': data_fraction,
+            'sample_size': sample_size,
         }
 
+    return results
+
+def augment_with_comparison_results(results):
+    """Augment sparse evaluation-based results with comparison_results JSONs.
+    Ensures multiple dataset fractions (e.g., 5/25/50) appear even if some eval JSONs are missing.
+    """
+    cr_dir = OUTPUTS_DIR / 'comparison_results'
+    if not cr_dir.exists():
+        return results
+    # pick most recent comparison file
+    cr_files = sorted(cr_dir.glob('comparison_results_*.json'))
+    if not cr_files:
+        cr_files = list(cr_dir.glob('comparison.json'))
+    if not cr_files:
+        return results
+    comp_path = max(cr_files, key=lambda p: p.stat().st_mtime)
+    try:
+        data = safe_read_json(comp_path)
+    except Exception:
+        return results
+    # Normalize to list of model_results
+    if isinstance(data, dict) and 'model_results' in data:
+        model_results = data['model_results']
+    elif isinstance(data, list):
+        model_results = data
+    else:
+        return results
+
+    for r in model_results:
+        try:
+            model_type = r.get('model_type')
+            regime = r.get('training_regime', 'supervised')
+            test_acc = float(r.get('test_accuracy', 0) or 0)
+            label_budget = r.get('budget_value', 1.0)
+            data_fraction = r.get('data_fraction', None)
+            # Insert stub entry if missing
+            key = (model_type, regime)
+            if key not in results:
+                results[key] = {}
+            # If we are going to pivot by data fraction, stash under label=100 for compatibility
+            label_pct = int(round(float(label_budget) * 100)) if label_budget is not None else 100
+            entry = results[key].get(label_pct, {})
+            # Preserve best (or latest) accuracy per data fraction by storing a small map
+            df_map = entry.get('_df_map', {})
+            if data_fraction is not None:
+                try:
+                    df_key = int(round(float(data_fraction) * 100))
+                    prev = df_map.get(df_key)
+                    if prev is None or test_acc > prev.get('test_accuracy', 0):
+                        df_map[df_key] = {
+                            'test_accuracy': test_acc,
+                            'data_fraction': data_fraction
+                        }
+                except Exception:
+                    pass
+            # Also keep a representative top-level accuracy
+            if not entry.get('test_accuracy') or test_acc > entry.get('test_accuracy', 0):
+                entry['test_accuracy'] = test_acc
+            entry['data_fraction'] = entry.get('data_fraction', data_fraction)
+            entry['_df_map'] = df_map
+            results[key][label_pct] = entry
+        except Exception:
+            continue
+    # Also parse local models/ filenames to backfill fractions (e.g., best_*_dataXXpct_*.pth)
+    models_dir = Path('models')
+    if models_dir.exists():
+        import re
+        def infer_key_from_filename(fname: str):
+            name = fname.lower()
+            if 'efficientnet' in name or 'cnn' in name:
+                model_type = 'cnn'
+                regime = 'supervised'
+            elif 'vit' in name and 'dinov2' not in name:
+                model_type = 'vit'
+                regime = 'supervised'
+            elif 'dinov2' in name:
+                model_type = 'dinov2'
+                if 'linear_probe' in name:
+                    regime = 'linear_probe'
+                elif 'fine_tune' in name:
+                    regime = 'fine_tune'
+                else:
+                    regime = 'supervised'
+            else:
+                model_type, regime = None, None
+            return model_type, regime
+        for p in models_dir.glob('best_*_data*pct_*.pth'):
+            try:
+                model_type, regime = infer_key_from_filename(p.name)
+                if not model_type or not regime:
+                    continue
+                m = re.search(r"_data(\d+)pct", p.name)
+                if not m:
+                    continue
+                df_key = int(m.group(1))
+                # extract accuracy if present
+                acc = None
+                if 'acc' in p.name:
+                    try:
+                        acc = float(p.name.split('acc')[-1].replace('.pth', ''))
+                    except Exception:
+                        acc = None
+                key = (model_type, regime)
+                if key not in results:
+                    results[key] = {}
+                entry = results[key].get(100, {})  # stash under 100% labels compatibility
+                df_map = entry.get('_df_map', {})
+                prev = df_map.get(df_key)
+                if acc is None:
+                    acc = entry.get('test_accuracy', 0) or 0
+                if prev is None or (acc is not None and acc > prev.get('test_accuracy', 0)):
+                    df_map[df_key] = {'test_accuracy': acc if acc is not None else 0.0,
+                                      'data_fraction': df_key / 100.0}
+                entry['_df_map'] = df_map
+                if 'data_fraction' not in entry:
+                    entry['data_fraction'] = df_key / 100.0
+                if 'test_accuracy' not in entry and acc is not None:
+                    entry['test_accuracy'] = acc
+                results[key][100] = entry
+            except Exception:
+                continue
     return results
 
 
@@ -231,7 +383,44 @@ def plot_label_efficiency(results):
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
     plt.figure(figsize=(7, 5))
 
-    label_points = sorted({lp for _, m in results.items() for lp in m.keys()})
+    # Merge in comparison_results to ensure we have all dataset fractions
+    results = augment_with_comparison_results(results)
+
+    # Detect if dataset fractions are present; don't require all labels==100 (mixed histories still pivot to data)
+    has_any = any(results.values())
+    entries = []
+    df_candidates = set()
+    for (_, _reg), m in results.items():
+        for lp, cond in m.items():
+            entries.append((lp, cond))
+            # collect from explicit field
+            if cond.get('data_fraction') is not None:
+                try:
+                    df_candidates.add(int(round(float(cond.get('data_fraction')) * 100)))
+                except Exception:
+                    pass
+            # collect from consolidated _df_map
+            df_map = cond.get('_df_map')
+            if isinstance(df_map, dict):
+                for k in df_map.keys():
+                    try:
+                        df_candidates.add(int(k))
+                    except Exception:
+                        continue
+    any_data_fraction = len(df_candidates) > 0
+    use_data_fraction = any_data_fraction
+
+    if use_data_fraction:
+        # Build x-axis from consolidated set (df_candidates) but restrict to canonical fractions
+        target_fractions = {5, 25, 50}
+        data_points = sorted((set(df_candidates) & target_fractions) or df_candidates)
+        xlabel = 'Dataset fraction (%)'
+        title = 'Data efficiency: accuracy vs dataset fraction'
+    else:
+        data_points = sorted({lp for (lp, _cond) in entries})
+        xlabel = 'Labeled percentage (%)'
+        title = 'Label efficiency: accuracy vs labeled fraction'
+
     series_order = [
         ('cnn', 'supervised', 'CNN (supervised)', 'C0'),
         ('vit', 'supervised', 'ViT (supervised)', 'C1'),
@@ -242,25 +431,66 @@ def plot_label_efficiency(results):
     for key_model, key_regime, label, color in series_order:
         if (key_model, key_regime) not in results:
             continue
-        ys = []
-        xs = []
-        for lp in label_points:
-            cond = results[(key_model, key_regime)].get(lp)
-            if cond is not None:
-                xs.append(lp)
-                ys.append(cond['test_accuracy'])
+        # Collapse to one point per dataset fraction to avoid duplicates
+        best_by_dp = {}
+        if use_data_fraction:
+            # First, fold in consolidated maps across all label_pct entries
+            for (_lp, cond) in results[(key_model, key_regime)].items():
+                df_map = cond.get('_df_map')
+                if isinstance(df_map, dict):
+                    for dp_key, rec in df_map.items():
+                        try:
+                            dp_int = int(dp_key)
+                            acc = float(rec.get('test_accuracy', 0) or 0)
+                            if dp_int not in best_by_dp or acc > best_by_dp[dp_int]:
+                                best_by_dp[dp_int] = acc
+                        except Exception:
+                            continue
+            # Then, consider single-entry data_fraction fields
+            for (_lp, cond) in results[(key_model, key_regime)].items():
+                df = cond.get('data_fraction')
+                if df is None:
+                    continue
+                try:
+                    dp_int = int(round(float(df) * 100))
+                    acc = float(cond.get('test_accuracy', 0) or 0)
+                    if dp_int not in best_by_dp or acc > best_by_dp[dp_int]:
+                        best_by_dp[dp_int] = acc
+                except Exception:
+                    continue
+            xs = sorted([dp for dp in set(data_points) if dp in best_by_dp])
+            ys = [best_by_dp[dp] for dp in xs]
+        else:
+            # Label-percentage mode: pick a single accuracy per label budget
+            xs, ys = [], []
+            for dp in sorted(set(data_points)):
+                cond = results[(key_model, key_regime)].get(dp)
+                if cond is not None:
+                    xs.append(dp)
+                    ys.append(cond.get('test_accuracy'))
         if xs:
-            plt.plot(xs, ys, marker='o', label=label, color=color)
+            plt.scatter(xs, ys, label=label, color=color, s=60, edgecolors='white', linewidths=1.0)
+            # Debug summary per-series
+            try:
+                series_counts = {int(x): 1 for x in xs}
+                print(f"[label_efficiency] {label}: points per fraction = {sorted(series_counts.keys())}")
+            except Exception:
+                pass
 
-    plt.xlabel('Labeled percentage (%)')
+    plt.xlabel(xlabel)
     plt.ylabel('Test accuracy (%)')
-    plt.title('Label efficiency: accuracy vs labeled fraction')
-    plt.xticks(label_points)
+    plt.title(title)
+    plt.xticks(data_points)
     plt.grid(True, alpha=0.3)
     plt.legend()
     out_path = PLOTS_DIR / 'label_efficiency.png'
     plt.tight_layout()
     plt.savefig(out_path, dpi=150)
+    # Global debug summary
+    try:
+        print(f"[label_efficiency] x-axis fractions: {data_points}")
+    except Exception:
+        pass
     return out_path
 
 

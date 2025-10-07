@@ -86,8 +86,25 @@ def get_model_identifier(model_name=None, config=None):
     else:
         percentage = 100  # Default when few-shot is not used
     
-    # Build final identifier
-    return f"{base_id}_{strategy}_labels{percentage}pct"
+    # Build final identifier and optionally append dataset fraction/sample size
+    identifier = f"{base_id}_{strategy}_labels{percentage}pct"
+    try:
+        data_fraction = getattr(config, 'DATA_FRACTION', None)
+        sample_size = getattr(config, 'SAMPLE_SIZE', None)
+        if data_fraction is not None:
+            try:
+                pct = int(max(0, min(100, round(float(data_fraction) * 100))))
+                identifier = f"{identifier}_data{pct}pct"
+            except Exception:
+                pass
+        elif sample_size is not None:
+            try:
+                identifier = f"{identifier}_n{int(sample_size)}"
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return identifier
 
 def create_improved_classifier(in_features, num_classes, model_type="cnn", config=None):
     """Create an improved classification head with modern components."""

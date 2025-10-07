@@ -312,6 +312,9 @@ def comprehensive_test_evaluation(model, test_loader, device, class_names, model
         'predictions': y_pred.tolist(),
         'true_labels': y_true.tolist(),
         'probabilities': y_prob.tolist(),
+        # Dataset fraction/sample size for downstream plotting (data-efficiency axis)
+        'data_fraction': getattr(config_module, 'DATA_FRACTION', None),
+        'sample_size': getattr(config_module, 'SAMPLE_SIZE', None),
         'files': {
             'log_file': str(eval_logger.log_filename),
             'results_file': None  # Will be set by save_evaluation_results

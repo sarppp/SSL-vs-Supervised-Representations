@@ -552,6 +552,28 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         # Generate the full model identifier for logging and saving
         from src.models.model_setup import get_model_identifier
         current_model_name = get_model_identifier(original_name, active_config)
+        # Append dataset fraction/sample size to the identifier if available so files are named from the start
+        try:
+            df = None
+            ss = None
+            if experiment_context and isinstance(experiment_context, dict):
+                df = experiment_context.get('data_fraction', None)
+                ss = experiment_context.get('sample_size', None)
+            if df is not None:
+                pct = int(max(0, min(100, round(float(df) * 100))))
+                current_model_name = f"{current_model_name}_data{pct}pct"
+            elif ss is not None:
+                current_model_name = f"{current_model_name}_n{int(ss)}"
+        except Exception:
+            pass
+        # Ensure all downstream consumers (training/eval/loggers) use the augmented identifier
+        try:
+            active_config.MODEL_NAME = current_model_name
+            # Also set config hints so get_model_identifier can append data fraction universally
+            setattr(active_config, 'DATA_FRACTION', df if 'df' in locals() else None)
+            setattr(active_config, 'SAMPLE_SIZE', ss if 'ss' in locals() else None)
+        except Exception:
+            pass
             
         model = model_setup.create_model(num_classes, original_name, active_config).to(device)
         
@@ -707,12 +729,15 @@ def run_model(model_type='cnn', sample_size=None, few_shot_mode=None, few_shot_v
         return result
         
     except Exception as e:
-        # Generate proper model identifier for error logging
+        # Generate proper model identifier for error logging (use augmented name if available)
         try:
-            from src.models.model_setup import get_model_identifier
-            current_model_name = get_model_identifier(model_name, active_config)
-        except:
-            current_model_name = getattr(active_config, 'MODEL_NAME', 'unknown')
+            current_model_name = getattr(active_config, 'MODEL_NAME', None)
+            if not current_model_name:
+                from src.models.model_setup import get_model_identifier
+                base_name = getattr(active_config, 'MODEL_NAME', 'unknown')
+                current_model_name = get_model_identifier(base_name, active_config)
+        except Exception:
+            current_model_name = 'unknown'
         
         error_result = {'model_type': model_type, 'success': False, 'error': str(e), 'time': time.time() - start_time}
         if comparison_logger:
@@ -1187,6 +1212,52 @@ def print_experiment_console_summary(all_results, start_time, end_time, output_f
     
     return output_file
 
+def write_run_manifest(all_results, output_dir='outputs/manifests'):
+    """Automatically write a Markdown manifest for the current run.
+    Lists checkpoints with model/regime/data fraction/accuracy and key output files.
+    """
+    from pathlib import Path
+    from datetime import datetime
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    out_md = Path(output_dir) / f'manifest_{ts}.md'
+
+    # Build rows (successful only)
+    successful = [r for r in all_results if r.get('success', False)]
+
+    def fmt_pct(frac):
+        try:
+            return f"{int(float(frac)*100)}%"
+        except Exception:
+            return "N/A"
+
+    with open(out_md, 'w') as f:
+        f.write(f"# Run Manifest ({ts})\n\n")
+        # Checkpoints table
+        f.write("## Checkpoints\n\n")
+        f.write('| Model | Regime | Data | Labels | Acc (%) | Checkpoint |\n')
+        f.write('| --- | --- | --- | --- | --- | --- |\n')
+        for r in successful:
+            model = (r.get('model_type') or '').upper()
+            regime = r.get('training_regime', '')
+            data_pct = fmt_pct(r.get('data_fraction')) if r.get('data_fraction') is not None else ''
+            labels_pct = fmt_pct(r.get('budget_value')) if r.get('budget_value') is not None else ''
+            acc = r.get('test_accuracy', '')
+            ckpt = r.get('best_model_path', '')
+            f.write(f"| {model} | {regime} | {data_pct} | {labels_pct} | {acc} | {ckpt} |\n")
+        f.write("\n")
+
+        # Basic lists for other outputs (paths are static conventions)
+        f.write('## Output Folders\n\n')
+        f.write('- outputs/comparison_results/\n')
+        f.write('- outputs/evaluation_results/\n')
+        f.write('- outputs/training_results/\n')
+        f.write('- outputs/plots/\n')
+        f.write('- outputs/checkpoints/\n')
+
+    print(f" Manifest written: {out_md}")
+    return str(out_md)
+
 def main():
     """Main comparison function with MULTIPLE SEEDS and TRAINING REGIMES"""
     print(" QUICK TEST MODE: 1000 samples, reduced epochs (~1-2 hours)")
@@ -1206,18 +1277,20 @@ def main():
         data_logger=DataSplitterLogger("dataset_overview")
     )
     total_dataset_size = len(temp_train) + len(temp_val) + len(temp_test)
-    
-    #  DATASET SIZE Configuration:
+        #  DATASET SIZE Configuration:
     # SAMPLE_SIZE = 10000                            # Full experiment (12-15 hours with old batch 64)
     # SAMPLE_SIZE = 4000                             #  OPTIMIZED: ~6-7 hours with batch 256 + grad accum
     # SAMPLE_SIZE = 1000                             # Quick test (~1.5 hours)
-    SAMPLE_SIZE = None                             # Balanced: good results in <8 hours
+    # SAMPLE_SIZE = None                             # Balanced: good results in <8 hours
+    #  DATASET SIZE Configuration (sweep fractions of the full dataset)
+    DATA_FRACTIONS = [0.05, 0.25, 0.50]
+    SAMPLE_SIZE = None  # Will be computed per fraction
     
     #  CRITICAL: Label efficiency analysis - how much labeled data is needed?
     LABEL_BUDGETS = [
         # ('percentage', 0.05),  # 5% of labels visible (very low-label)
-        ('percentage', 0.1),   # 10% of labels visible (few-shot learning)
-        ('percentage', 0.5),   # 50% of labels visible (medium-shot learning)  
+        #('percentage', 0.1),   # 10% of labels visible (few-shot learning)
+        #('percentage', 0.5),   # 50% of labels visible (medium-shot learning)  
         ('percentage', 1.0)    # 100% of labels visible (full supervision)
     ]
     
@@ -1231,14 +1304,7 @@ def main():
         'vit': ['supervised']   # ViT: supervised only (training from scratch)
     }
     
-    if SAMPLE_SIZE is None:
-        print(f" Dataset: FULL DATASET (100% of {total_dataset_size:,})")
-    else:
-        try:
-            pct = (SAMPLE_SIZE / total_dataset_size) * 100 if total_dataset_size > 0 else 0.0
-        except Exception:
-            pct = 0.0
-        print(f" Dataset: {SAMPLE_SIZE:,} samples ({pct:.1f}% of {total_dataset_size:,})")
+    print(f" Dataset fractions: {', '.join(str(int(f*100))+'%' for f in DATA_FRACTIONS)} of {total_dataset_size:,}")
     print(f" Label budgets: {len(LABEL_BUDGETS)} budgets × {len(RANDOM_SEEDS)} seeds × models")
     print(f" Training regimes: {TRAINING_REGIMES}")
     
@@ -1252,7 +1318,7 @@ def main():
     # Log experiment start
     dataset_info = {'total_dataset_size': total_dataset_size}
     experiment_config = {
-        'sample_size': SAMPLE_SIZE,
+        'data_fractions': DATA_FRACTIONS,
         'label_budgets': LABEL_BUDGETS,
         'random_seeds': RANDOM_SEEDS,
         'training_regimes': TRAINING_REGIMES,
@@ -1263,107 +1329,132 @@ def main():
     all_results = []
     
     #  RUN COMPREHENSIVE EXPERIMENTS
-    total_experiments = len(LABEL_BUDGETS) * len(RANDOM_SEEDS) * sum(len(regimes) for regimes in TRAINING_REGIMES.values())
+    total_experiments = (
+        len(DATA_FRACTIONS) * len(LABEL_BUDGETS) * len(RANDOM_SEEDS)
+        * sum(len(regimes) for regimes in TRAINING_REGIMES.values())
+    )
     experiment_count = 0
-    
-    for budget_idx, (budget_mode, budget_value) in enumerate(LABEL_BUDGETS, 1):
-        label_desc = f"{int(budget_value*100)}%" if budget_mode == 'percentage' else f"{budget_value}/class"
-        
+
+    for df_idx, data_fraction in enumerate(DATA_FRACTIONS, 1):
+        try:
+            SAMPLE_SIZE = int(max(1, total_dataset_size * float(data_fraction)))
+        except Exception:
+            SAMPLE_SIZE = None
+
         print(f"\n" + "="*80)
-        print(f" LABEL BUDGET {budget_idx}/{len(LABEL_BUDGETS)}: {label_desc} of training labels visible")
-        print(f"    Mode: {budget_mode} | Value: {budget_value}")
-        print("="*80)
-        
-        for seed in RANDOM_SEEDS:
-            print(f"\n Random seed: {seed}")
+        print(f" DATA FRACTION {df_idx}/{len(DATA_FRACTIONS)}: {int(data_fraction*100)}% of data")
+        if SAMPLE_SIZE is not None:
+            try:
+                pct = (SAMPLE_SIZE / total_dataset_size) * 100 if total_dataset_size > 0 else 0.0
+            except Exception:
+                pct = 0.0
+            print(f"    Using SAMPLE_SIZE={SAMPLE_SIZE:,} (~{pct:.1f}% of {total_dataset_size:,})")
+        else:
+            print("    Using FULL DATASET")
+
+        for budget_idx, (budget_mode, budget_value) in enumerate(LABEL_BUDGETS, 1):
+            label_desc = f"{int(budget_value*100)}%" if budget_mode == 'percentage' else f"{budget_value}/class"
             
-            # Update global seed
-            random.seed(seed)
-            np.random.seed(seed)
-            torch.manual_seed(seed)
-            torch.cuda.manual_seed(seed)
+            print(f"\n" + "="*80)
+            print(f" LABEL BUDGET {budget_idx}/{len(LABEL_BUDGETS)}: {label_desc} of training labels visible")
+            print(f"    Mode: {budget_mode} | Value: {budget_value}")
+            print("="*80)
             
-            for model_type, actual_name in model_types:
-                regimes = TRAINING_REGIMES[model_type]
+            for seed in RANDOM_SEEDS:
+                print(f"\n Random seed: {seed}")
                 
-                for regime in regimes:
-                    experiment_count += 1
+                # Update global seed
+                random.seed(seed)
+                np.random.seed(seed)
+                torch.manual_seed(seed)
+                torch.cuda.manual_seed(seed)
+                
+                for model_type, actual_name in model_types:
+                    regimes = TRAINING_REGIMES[model_type]
                     
-                    #  ENHANCED EXPERIMENT IDENTIFICATION
-                    label_desc = f"{int(budget_value*100)}%" if budget_mode == 'percentage' else f"{budget_value}/class"
-                    experiment_title = f"{model_type.upper()}-{regime.upper()}, {label_desc} labels"
-                    
-                    print(f"\n EXPERIMENT [{experiment_count}/{total_experiments}]: {experiment_title}")
-                    print(f"    Seed: {seed} | Budget: {budget_mode}={budget_value}")
-                    
-                    # Create experiment context for logging
-                    experiment_context = {
-                        'experiment_number': experiment_count,
-                        'total_experiments': total_experiments,
-                        'experiment_title': experiment_title,
-                        'label_description': label_desc,
-                        'budget_mode': budget_mode,
-                        'budget_value': budget_value,
-                        'random_seed': seed,
-                        'training_regime': regime  # Add training regime to context
-                    }
-                    
-                    # Modify config based on training regime
-                    freeze_backbone = (regime == 'linear_probe')
-                    
-                    # Get the current GPU configuration for this experiment
-                    current_gpu_config = None
-                    if GPU_CONFIGS_AVAILABLE:
-                        # Use the same GPU config that was set in run_model
-                        if 'GPU_CONFIG' in globals() and GPU_CONFIG is not None:
-                            current_gpu_config = GPU_CONFIG
-                    
-                    result = run_model_with_regime(
-                        model_type=model_type,
-                        sample_size=SAMPLE_SIZE,
-                        few_shot_mode=budget_mode,
-                        few_shot_value=budget_value,
-                        training_regime=regime,
-                        freeze_backbone=freeze_backbone,
-                        random_seed=seed,
-                        experiment_context=experiment_context,
-                        comparison_logger=comparison_logger,
-                        gpu_config=current_gpu_config
-                    )
-                    
-                    # Add experiment metadata  
-                    result.update({
-                        'budget_mode': budget_mode,
-                        'budget_value': budget_value,
-                        'training_regime': regime,
-                        'random_seed': seed,
-                        'freeze_backbone': freeze_backbone,
-                        'experiment_number': experiment_count,
-                        'experiment_title': experiment_title
-                    })
-                    
-                    all_results.append(result)
-                    
-                    #  EXPERIMENT COMPLETION SUMMARY
-                    if result.get('success', False):
-                        test_acc = result.get('test_accuracy', 0)
-                        train_acc = result.get('train_accuracy', 0)
-                        model_path = result.get('best_model_path', 'No path available')
-                        print(f"    COMPLETED: Train={train_acc:.1f}%, Test={test_acc:.1f}%")
-                        if model_path and model_path != 'No path available':
-                            print(f"    Model saved: {model_path}")
+                    for regime in regimes:
+                        experiment_count += 1
+                        
+                        data_desc = (
+                            f"{int((SAMPLE_SIZE/total_dataset_size)*100)}% data"
+                            if SAMPLE_SIZE is not None and total_dataset_size > 0 else "100% data"
+                        )
+                        experiment_title = f"{model_type.upper()}-{regime.upper()}, {data_desc}, {label_desc} labels"
+                        
+                        print(f"\n EXPERIMENT [{experiment_count}/{total_experiments}]: {experiment_title}")
+                        print(f"    Seed: {seed} | Budget: {budget_mode}={budget_value}")
+                        
+                        # Create experiment context for logging
+                        experiment_context = {
+                            'experiment_number': experiment_count,
+                            'total_experiments': total_experiments,
+                            'experiment_title': experiment_title,
+                            'label_description': label_desc,
+                            'budget_mode': budget_mode,
+                            'budget_value': budget_value,
+                            'random_seed': seed,
+                            'training_regime': regime,
+                            'data_fraction': data_fraction,
+                            'sample_size': SAMPLE_SIZE
+                        }
+                        
+                        # Modify config based on training regime
+                        freeze_backbone = (regime == 'linear_probe')
+                        
+                        # Get the current GPU configuration for this experiment
+                        current_gpu_config = None
+                        if GPU_CONFIGS_AVAILABLE:
+                            if 'GPU_CONFIG' in globals() and GPU_CONFIG is not None:
+                                current_gpu_config = GPU_CONFIG
+                        
+                        result = run_model_with_regime(
+                            model_type=model_type,
+                            sample_size=SAMPLE_SIZE,
+                            few_shot_mode=budget_mode,
+                            few_shot_value=budget_value,
+                            training_regime=regime,
+                            freeze_backbone=freeze_backbone,
+                            random_seed=seed,
+                            experiment_context=experiment_context,
+                            comparison_logger=comparison_logger,
+                            gpu_config=current_gpu_config
+                        )
+                        
+                        # Add experiment metadata  
+                        result.update({
+                            'budget_mode': budget_mode,
+                            'budget_value': budget_value,
+                            'training_regime': regime,
+                            'random_seed': seed,
+                            'freeze_backbone': freeze_backbone,
+                            'experiment_number': experiment_count,
+                            'experiment_title': experiment_title,
+                            'data_fraction': data_fraction,
+                            'sample_size': SAMPLE_SIZE
+                        })
+                        
+                        all_results.append(result)
+                        
+                        #  EXPERIMENT COMPLETION SUMMARY
+                        if result.get('success', False):
+                            test_acc = result.get('test_accuracy', 0)
+                            train_acc = result.get('train_accuracy', 0)
+                            model_path = result.get('best_model_path', 'No path available')
+                            print(f"    COMPLETED: Train={train_acc:.1f}%, Test={test_acc:.1f}%")
+                            if model_path and model_path != 'No path available':
+                                print(f"    Model saved: {model_path}")
+                            else:
+                                print(f"    Model saved as: {result.get('model_name', 'unknown')}")
                         else:
-                            print(f"    Model saved as: {result.get('model_name', 'unknown')}")
-                    else:
-                        print(f"    FAILED: {result.get('error', 'Unknown error')}")
-                    
-                    print(f"    Progress: {experiment_count}/{total_experiments} experiments done")
-                    print("   " + "="*60)
-                    
-                    # Clear GPU cache
-                    if device.type == 'cuda':
-                        comparison_logger.log_gpu_cleanup()
-                        torch.cuda.empty_cache()
+                            print(f"    FAILED: {result.get('error', 'Unknown error')}")
+                        
+                        print(f"    Progress: {experiment_count}/{total_experiments} experiments done")
+                        print("   " + "="*60)
+                        
+                        # Clear GPU cache
+                        if device.type == 'cuda':
+                            comparison_logger.log_gpu_cleanup()
+                            torch.cuda.empty_cache()
     
     #  AGGREGATE RESULTS: Compute mean ± std per (budget, regime, model)
     aggregated_results = aggregate_results_by_condition(all_results)
@@ -1424,6 +1515,11 @@ def main():
     
     end_time = time.time()
     print_experiment_console_summary(all_results, start_time, end_time)
+    # Auto-generate manifest for this run
+    try:
+        write_run_manifest(all_results)
+    except Exception as e:
+        print(f" Could not write manifest: {e}")
 
 if __name__ == "__main__":
     main() 

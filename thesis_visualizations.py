@@ -50,6 +50,9 @@ class ThesisVisualizer:
         
         # Detect available label percentages from data
         self.available_percentages = self.detect_available_percentages()
+
+        # Detect available dataset fractions (5%, 25%, 50%) from comparison results or filenames
+        self.available_data_fractions = self.detect_available_data_fractions()
         
     def load_comparison_data(self):
         """Load comparison results"""
@@ -191,6 +194,188 @@ class ThesisVisualizer:
                     valid_percentages.append(pct)
         
         return valid_percentages
+
+    def extract_data_fraction_from_name(self, name: str):
+        """Extract dataset fraction from a model/checkpoint name using pattern _dataXXpct."""
+        import re
+        match = re.search(r"_data(\d+)pct", name)
+        if match:
+            try:
+                return int(match.group(1))
+            except Exception:
+                return None
+        return None
+
+    def detect_available_data_fractions(self):
+        """Detect dataset fractions present in data (from comparison JSON or filenames)."""
+        fractions = set()
+        # From comparison data
+        if self.comparison_data and 'model_results' in self.comparison_data:
+            for model in self.comparison_data['model_results']:
+                df = model.get('data_fraction')
+                if df is not None:
+                    try:
+                        fractions.add(int(round(float(df) * 100)))
+                    except Exception:
+                        pass
+                # Also parse model_name if embedded
+                name = model.get('model_name', '')
+                fx = self.extract_data_fraction_from_name(name)
+                if fx is not None:
+                    fractions.add(fx)
+        # From checkpoints directory and models/ for historical files
+        for directory in [self.outputs_dir / 'checkpoints', Path('models')]:
+            if directory.exists():
+                for p in directory.glob('*.pth'):
+                    fx = self.extract_data_fraction_from_name(p.name)
+                    if fx is not None:
+                        fractions.add(fx)
+        return sorted(fractions)
+
+    def filter_data_by_data_fraction(self, fraction_pct: int):
+        """Filter data for a given dataset fraction percentage (e.g., 5, 25, 50)."""
+        filtered = {
+            'comparison_data': None,
+            'training_data': {},
+            'evaluation_data': {},
+            'checkpoint_data': {}
+        }
+        # Filter comparison data by explicit field or by name pattern
+        if self.comparison_data and 'model_results' in self.comparison_data:
+            selected = []
+            for model in self.comparison_data['model_results']:
+                ok = False
+                df = model.get('data_fraction')
+                if df is not None:
+                    try:
+                        ok = int(round(float(df) * 100)) == int(fraction_pct)
+                    except Exception:
+                        ok = False
+                if not ok:
+                    fx = self.extract_data_fraction_from_name(model.get('model_name', ''))
+                    ok = (fx == int(fraction_pct))
+                if ok:
+                    selected.append(model)
+            if selected:
+                filtered['comparison_data'] = {
+                    'model_results': selected,
+                    'summary': self.comparison_data.get('summary', {})
+                }
+        # Filter training/eval data: keep those whose key/name includes suffix
+        for model_name, data in self.training_data.items():
+            if self.extract_data_fraction_from_name(model_name) == int(fraction_pct):
+                filtered['training_data'][model_name] = data
+        for model_name, data in self.evaluation_data.items():
+            if self.extract_data_fraction_from_name(model_name) == int(fraction_pct):
+                filtered['evaluation_data'][model_name] = data
+        # Filter checkpoints
+        checkpoint_data = {}
+        for directory in [self.outputs_dir / 'checkpoints', Path('models')]:
+            if directory.exists():
+                for checkpoint in directory.glob('*.pth'):
+                    fx = self.extract_data_fraction_from_name(checkpoint.name)
+                    if fx == int(fraction_pct):
+                        model_type = self.extract_model_type(checkpoint.name)
+                        checkpoint_data.setdefault(model_type, [])
+                        # Extract accuracy
+                        acc = None
+                        if 'acc' in checkpoint.name:
+                            try:
+                                acc = float(checkpoint.name.split('acc')[-1].replace('.pth', ''))
+                            except Exception:
+                                acc = None
+                        checkpoint_data[model_type].append({
+                            'filename': checkpoint.name,
+                            'accuracy': acc if acc is not None else 0.0,
+                            'size_mb': checkpoint.stat().st_size / (1024 * 1024),
+                            'type': 'best' if 'best_' in checkpoint.name else 'final' if 'final_' in checkpoint.name else 'checkpoint'
+                        })
+        if checkpoint_data:
+            filtered['checkpoint_data'] = checkpoint_data
+        return filtered
+
+    def create_performance_comparison_by_data_fraction(self, fraction_pct: int, filtered_data=None):
+        """Performance comparison visualization keyed by dataset fraction (e.g., 5, 25, 50)."""
+        if filtered_data:
+            comparison_data = filtered_data['comparison_data']
+        else:
+            comparison_data = self.comparison_data
+        # Fallback from checkpoints if JSON missing
+        if not comparison_data and filtered_data and filtered_data['checkpoint_data']:
+            # Reuse existing helper with a pseudo-percentage label
+            return self.create_simple_accuracy_chart(filtered_data['checkpoint_data'], None)
+        if not comparison_data:
+            print(f" No comparison data available for data fraction {fraction_pct}%")
+            return None
+        title = f'Model Performance Comparison: Dataset {fraction_pct}%'
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
+        fig.suptitle(title, fontsize=16, fontweight='bold')
+        models = comparison_data['model_results']
+        # Prepare data
+        model_names, train_accs, test_accs, val_accs, training_times = [], [], [], [], []
+        colors = []
+        for model in models:
+            name = model['model_name'].replace('_', ' ').title()
+            model_names.append(name)
+            train_accs.append(model.get('train_accuracy', model.get('test_accuracy', 0)))
+            test_accs.append(model.get('test_accuracy', 0))
+            val_accs.append(model.get('best_val_acc', model.get('test_accuracy', 0)))
+            training_times.append(model.get('time', 0) / 60)
+            colors.append(self.get_model_colors(model['model_name']))
+        # 1. Test Accuracy
+        bars1 = ax1.bar(model_names, test_accs, color=colors, alpha=0.8, edgecolor='black', linewidth=1)
+        ax1.set_title('Test Accuracy Comparison', fontweight='bold')
+        ax1.set_ylabel('Test Accuracy (%)')
+        ax1.set_ylim(0, 100)
+        ax1.tick_params(axis='x', rotation=45)
+        for bar, acc in zip(bars1, test_accs):
+            ax1.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 1, f'{acc:.1f}%', ha='center', va='bottom', fontweight='bold')
+        # 2. Train/Val/Test
+        x = np.arange(len(model_names)); width = 0.25
+        ax2.bar(x - width, train_accs, width, label='Training', alpha=0.8, color='#95E1D3')
+        ax2.bar(x,         val_accs,   width, label='Validation', alpha=0.8, color='#F38BA8')
+        ax2.bar(x + width, test_accs,  width, label='Test', alpha=0.8, color='#3D5A80')
+        ax2.set_title('Training vs Validation vs Test Accuracy', fontweight='bold')
+        ax2.set_ylabel('Accuracy (%)'); ax2.set_xlabel('Models')
+        ax2.set_xticks(x); ax2.set_xticklabels(model_names, rotation=45, ha='right')
+        ax2.legend(); ax2.set_ylim(0, 100)
+        # 3. Training Time
+        bars3 = ax3.bar(model_names, training_times, color=colors, alpha=0.8, edgecolor='black', linewidth=1)
+        ax3.set_title('Training Time Comparison', fontweight='bold'); ax3.set_ylabel('Training Time (minutes)')
+        ax3.tick_params(axis='x', rotation=45)
+        for bar, tmin in zip(bars3, training_times):
+            ax3.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.5, f'{tmin:.1f}m', ha='center', va='bottom', fontweight='bold')
+        # 4. Efficiency
+        ax4.scatter(training_times, test_accs, c=colors, s=200, alpha=0.8, edgecolors='black', linewidth=2)
+        for i, name in enumerate(model_names):
+            ax4.annotate(name, (training_times[i], test_accs[i]), xytext=(5, 5), textcoords='offset points', fontsize=10, fontweight='bold')
+        ax4.set_title('Efficiency: Accuracy vs Training Time', fontweight='bold')
+        ax4.set_xlabel('Training Time (minutes)'); ax4.set_ylabel('Test Accuracy (%)'); ax4.grid(True, alpha=0.3)
+        plt.tight_layout()
+        save_path = self.viz_dir / f"performance_comparison_data{int(fraction_pct)}pct.png"
+        print(f"Performance comparison (dataset {fraction_pct}%) saved to: {save_path}")
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        return fig
+
+    def generate_all_visualizations_by_data_fraction(self):
+        """Generate performance comparisons for each available dataset fraction."""
+        if not self.available_data_fractions:
+            print(" No dataset-fraction runs detected (expected filenames with _dataXXpct or JSON with data_fraction)")
+            return []
+        generated = []
+        for fx in self.available_data_fractions:
+            print(f"\nGenerating visualizations for dataset {fx}%...")
+            filtered = self.filter_data_by_data_fraction(int(fx))
+            try:
+                fig = self.create_performance_comparison_by_data_fraction(int(fx), filtered_data=filtered)
+                if fig:
+                    generated.append(f"Performance Comparison (data {fx}%)")
+                    plt.close(fig)
+                else:
+                    print(f"  WARNING: Skipping performance comparison for data {fx}% (no data)")
+            except Exception as e:
+                print(f"   Error creating visuals for dataset {fx}%: {e}")
+        return generated
     
     def filter_data_by_percentage(self, percentage):
         """Filter all data to only include models with the specified label percentage"""
